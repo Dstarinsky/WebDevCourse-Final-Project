@@ -113,7 +113,10 @@
                             <div class="btn-group">
                                 <a href="<%= prevLink %>" class="btn btn-outline-light border-0 <%= currentIndex <= 0 ? 'disabled' : '' %>"><i class="bi bi-skip-start-fill fs-4"></i></a>
                                 <% if (songs.length > 0) { %>
-                                    <a href="/playlists/<%= playlist.id %>?play=<%= songs[0].videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="btn btn-primary rounded-pill px-4 mx-2 fw-bold shadow-sm"><i class="bi bi-play-circle-fill me-2"></i> Play All</a>
+                                    <a href="/playlists/<%= playlist.id %>?play=<%= songs[0].videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="btn btn-primary rounded-pill px-4 mx-2 fw-bold shadow-sm" style="
+                                        display: flex;
+                                        align-items: center;
+                                    "><i class="bi bi-play-circle-fill me-2"></i> Play All</a>
                                 <% } %>
                                 <a href="<%= nextLink || '#' %>" class="btn btn-outline-light border-0 <%= currentIndex >= songs.length - 1 ? 'disabled' : '' %>"><i class="bi bi-skip-end-fill fs-4"></i></a>
                             </div>
