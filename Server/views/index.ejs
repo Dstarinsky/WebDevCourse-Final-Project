@@ -21,13 +21,21 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center gap-3">
+                    
                     <li class="nav-item"><a href="/" class="nav-link text-white active">Home</a></li>
-                    <li class="nav-item"><a href="/favorites" class="nav-link text-white">Search Music</a></li>
-                    <li class="nav-item"><a href="/playlists" class="nav-link text-white">My Playlists</a></li>
-                    <li class="nav-item border-start ps-3 border-secondary d-flex align-items-center gap-2">
-                        <span class="text-white fw-bold"><%= user.firstName %></span>
-                        <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
-                    </li>
+
+                    <% if (user) { %>
+                        <li class="nav-item"><a href="/favorites" class="nav-link text-white">Search Music</a></li>
+                        <li class="nav-item"><a href="/playlists" class="nav-link text-white">My Playlists</a></li>
+                        <li class="nav-item border-start ps-3 border-secondary d-flex align-items-center gap-2">
+                            <span class="text-white fw-bold"><%= user.firstName %></span>
+                            <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+                        </li>
+                    <% } else { %>
+                        <li class="nav-item"><a href="/login" class="btn btn-outline-light btn-sm px-4">Login</a></li>
+                        <li class="nav-item"><a href="/register" class="btn btn-custom btn-sm px-4">Register</a></li>
+                    <% } %>
+
                 </ul>
             </div>
         </div>
@@ -38,27 +46,48 @@
         <p class="lead mb-5 text-secondary">Search for your favorite songs on YouTube and create your personal collection.</p>
         
         <div class="d-flex gap-3">
-            <a href="/favorites" class="btn btn-custom btn-lg shadow">
-                <i class="bi bi-search me-2"></i> Search Songs
-            </a>
-            <a href="/playlists" class="btn btn-outline-custom btn-lg shadow">
-                <i class="bi bi-music-note-list me-2"></i> Go to Playlists
-            </a>
+            <% if (user) { %>
+                <a href="/favorites" class="btn btn-custom btn-lg shadow">
+                    <i class="bi bi-search me-2"></i> Search Songs
+                </a>
+                <a href="/playlists" class="btn btn-outline-custom btn-lg shadow">
+                    <i class="bi bi-music-note-list me-2"></i> Go to Playlists
+                </a>
+            <% } else { %>
+                <a href="/login" class="btn btn-custom btn-lg shadow px-5">
+                    <i class="bi bi-box-arrow-in-right me-2"></i> Login to Start
+                </a>
+                <a href="/register" class="btn btn-outline-light btn-lg shadow px-5">
+                    Create Account
+                </a>
+            <% } %>
         </div>
     </div>
 
     <footer class="social-footer">
+
         <div class="container d-flex flex-column align-items-center gap-3">
+
             <p class="small text-secondary mb-0">Connect with me</p>
+
             <div class="d-flex gap-3">
+
                 <a href="https://github.com/Dstarinsky" target="_blank" class="social-link">
+
                     <i class="bi bi-github fs-4"></i>
+
                 </a>
+
                 <a href="https://www.linkedin.com/in/david-starinsky/" target="_blank" class="social-link">
+
                     <i class="bi bi-linkedin fs-4"></i>
+
                 </a>
+
             </div>
+
         </div>
+
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

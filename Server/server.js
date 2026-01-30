@@ -88,8 +88,8 @@ app.post('/register', (req, res) => AuthController.register(req, res));
 app.get('/logout', (req, res) => AuthController.logout(req, res));
 
 // -- Protected Main Dashboard --
-app.get('/', requireAuth, (req, res) => {
-    res.render('index', { user: req.session.user });
+app.get('/', (req, res) => {
+    res.render('index', { user: req.session.user || null });
 });
 
 // -- YouTube Favorites Routes --
