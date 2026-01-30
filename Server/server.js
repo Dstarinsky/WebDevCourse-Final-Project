@@ -27,23 +27,22 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// --- 1. CONFIGURATION ---
+// --- CONFIGURATION ---
 
 // Set View Engine to EJS
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Serve Static Files (CSS, Images, Client JS if needed)
+// Serve Static Files
 app.use(express.static(path.join(__dirname, '../client')));
 
-// Parse Form Data (Required for POST requests)
+// Parse Form Data
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// --- 2. MIDDLEWARE ---
+// --- MIDDLEWARE ---
 
-// FIX: Auto-redirect .html requests to extensionless routes
-// (Prevents "404 Not Found" if you type /login.html)
+
 app.use((req, res, next) => {
     if (req.path.endsWith('.html')) {
         const newPath = req.path.slice(0, -5);
@@ -55,8 +54,8 @@ app.use((req, res, next) => {
 // Session Configuration (Stored in SQLite database)
 app.use(session({
     store: new SQLiteStore({ 
-        db: 'sessions.sqlite', // File name for sessions
-        dir: './database'      // Directory to save it
+        db: 'sessions.sqlite', 
+        dir: './database'      
     }),
     secret: 'your_secret_key_change_this',
     resave: false,
@@ -77,7 +76,7 @@ const requireAuth = (req, res, next) => {
     next();
 };
 
-// --- 3. ROUTES (MVC Architecture) ---
+// --- ROUTES (MVC Architecture) ---
 
 // -- Authentication Routes --
 app.get('/login', (req, res) => AuthController.showLogin(req, res));
@@ -114,7 +113,7 @@ app.post('/playlists/reorder', requireAuth, (req, res) => PlaylistController.reo
 
 
 
-// --- 4. START SERVER ---
+// --- START SERVER ---
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
 });
