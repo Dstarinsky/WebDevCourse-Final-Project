@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: music-hub
+    runtime: node
+    region: oregon
+    plan: free                
+    
+    buildCommand: npm install
+    startCommand: node Server/server.js
+
+    # Health Check
+    healthCheckPath: /
+
+    # Environment Variables
+    envVars:
+      - key: NODE_VERSION
+        value: 20.0.0
+      
+      - key: SESSION_SECRET
+        generateValue: true    
+      
+      - key: YOUTUBE_API_KEY
+        sync: false            

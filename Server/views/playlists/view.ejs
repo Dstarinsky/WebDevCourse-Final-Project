@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title><%= playlist.name %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+    <style>
+        .sidebar { background-color: var(--card-bg); border-right: 1px solid rgba(255,255,255,0.05); }
+        .active-playlist { background: linear-gradient(90deg, var(--color-electric), var(--color-shock)) !important; color: white !important; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .rating-star-small { color: rgba(255,255,255,0.15); cursor: pointer; font-size: 0.65rem; transition: 0.2s; margin-right: 1px; }
+        .rating-star-small.checked { color: var(--color-neon); text-shadow: 0 0 5px var(--color-neon); }
+        .rating-btn { background: none; border: none; padding: 0; line-height: 0; }
+        .queue-item:hover { background-color: rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    </style>
+</head>
+<body style="overflow: hidden;"> 
+    
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-music-note-beamed"></i> MyMusicApp</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-center gap-3">
+                    <li class="nav-item"><a href="/" class="nav-link text-white">Home</a></li>
+                    <li class="nav-item"><a href="/favorites" class="nav-link text-white">Search Music</a></li>
+                    <li class="nav-item"><a href="/playlists" class="nav-link text-white active">My Playlists</a></li>
+                    <li class="nav-item border-start ps-3 border-secondary d-flex align-items-center gap-2">
+                        <span class="text-white fw-bold"><%= user.firstName %></span>
+                        <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="row g-0">
+        <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column d-none d-md-flex" style="height: calc(100vh - 56px);">
+            <div class="d-flex justify-content-between align-items-center mb-4 px-2">
+                <h6 class="text-uppercase text-readable-secondary fw-bold small mb-0">My Playlists</h6>
+                <button class="btn btn-outline-primary btn-square" data-bs-toggle="modal" data-bs-target="#createModal">
+                    <i class="bi bi-plus text-lg"></i>
+                </button>
+            </div>
+            
+            <div id="playlist-list" class="d-flex flex-column gap-2 overflow-auto custom-scrollbar playlist-container" style="flex: 1;">
+                <% playlists.forEach((p) => { %>
+                    <div class="playlist-item" draggable="true" data-id="<%= p.id %>">
+                        <a href="/playlists/<%= p.id %>" class="text-decoration-none p-2 px-3 rounded d-flex justify-content-between align-items-center playlist-link <%= p.id == playlist.id ? 'active-playlist fw-bold' : 'text-readable-secondary' %>">
+                            <span class="text-truncate"><%= p.name %></span>
+                            <% if (p.id == playlist.id) { %> <i class="bi bi-soundwave text-white ms-auto"></i> <% } %>
+                        </a>
+                    </div>
+                <% }) %>
+            </div>
+        </div>
+
+        <div class="col-md-9 col-lg-10 p-4" style="height: calc(100vh - 56px); overflow-y: auto;">
+            
+            <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-3" style="border-color: rgba(255,255,255,0.1) !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <h3 class="fw-bold mb-0 text-white"><%= playlist.name %></h3>
+                    <button class="btn btn-link text-readable-secondary p-0" data-bs-toggle="modal" data-bs-target="#renameModal"><i class="bi bi-pencil-square"></i></button>
+                </div>
+                <form action="/playlists/delete" method="POST" onsubmit="return confirm('Delete this playlist permanently?');">
+                    <input type="hidden" name="id" value="<%= playlist.id %>">
+                    <button class="btn btn-sm btn-outline-danger border-0"><i class="bi bi-trash"></i> Delete Playlist</button>
+                </form>
+            </div>
+
+            <% 
+                let prevLink = "#"; let nextLink = ""; let currentIndex = -1;
+                if (currentSong) {
+                    currentIndex = songs.findIndex(s => s.id === currentSong.id);
+                    if (currentIndex > 0) prevLink = `/playlists/${playlist.id}?play=${songs[currentIndex - 1].videoId}&sort=${sortBy}&filter=${filterQuery}`;
+                    if (currentIndex < songs.length - 1) nextLink = `/playlists/${playlist.id}?play=${songs[currentIndex + 1].videoId}&sort=${sortBy}&filter=${filterQuery}`;
+                }
+            %>
+            <script>const nextSongUrl = "<%= nextLink %>";</script>
+
+            <div class="row">
+                <div class="col-lg-7 mb-4">
+                    <div class="ratio ratio-16x9 bg-black rounded-4 shadow-lg mb-4 position-relative overflow-hidden" style="border: 1px solid rgba(255,255,255,0.1);">
+                        <% if (currentSong) { %>
+                            <% if (currentSong.source === 'local') { %>
+                                <div class="d-flex flex-column align-items-center justify-content-center h-100 bg-dark text-white">
+                                    <div class="bg-secondary rounded-circle p-4 mb-3 bg-opacity-25"><i class="bi bi-music-note-beamed display-1 text-white"></i></div>
+                                    <h4 class="mb-4 fw-bold"><%= currentSong.title %></h4>
+                                    <audio controls autoplay onended="if(nextSongUrl) window.location.href = nextSongUrl;" style="width: 80%;">
+                                        <source src="/uploads/<%= currentSong.videoId %>" type="audio/mpeg">
+                                    </audio>
+                                </div>
+                            <% } else { %>
+                                <iframe id="yt-player" src="https://www.youtube.com/embed/<%= currentSong.videoId %>?autoplay=1&enablejsapi=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                            <% } %>
+                        <% } else { %>
+                            <div class="d-flex align-items-center justify-content-center text-white h-100 bg-dark">
+                                <h4 class="text-readable-secondary">Playlist is empty</h4>
+                            </div>
+                        <% } %>
+                    </div>
+
+                    <div class="card border-0 shadow-sm mb-4 bg-transparent">
+                        <div class="d-flex justify-content-between align-items-center p-3 rounded-pill" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="btn-group">
+                                <a href="<%= prevLink %>" class="btn btn-outline-light border-0 <%= currentIndex <= 0 ? 'disabled' : '' %>"><i class="bi bi-skip-start-fill fs-4"></i></a>
+                                <% if (songs.length > 0) { %>
+                                    <a href="/playlists/<%= playlist.id %>?play=<%= songs[0].videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="btn btn-primary rounded-pill px-4 mx-2 fw-bold shadow-sm"><i class="bi bi-play-circle-fill me-2"></i> Play All</a>
+                                <% } %>
+                                <a href="<%= nextLink || '#' %>" class="btn btn-outline-light border-0 <%= currentIndex >= songs.length - 1 ? 'disabled' : '' %>"><i class="bi bi-skip-end-fill fs-4"></i></a>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-toggle="collapse" data-bs-target="#uploadSection"><i class="bi bi-cloud-upload"></i> Upload</button>
+                        </div>
+                    </div>
+                    
+                    <div class="collapse mb-4" id="uploadSection">
+                        <div class="card card-body bg-dark border-secondary">
+                            <form action="/playlists/<%= playlist.id %>/upload" method="POST" enctype="multipart/form-data" class="d-flex gap-2">
+                                <input type="file" name="mp3file" class="form-control bg-secondary text-white border-0" accept="audio/*" required>
+                                <input type="text" name="title" class="form-control bg-secondary text-white border-0" placeholder="Song Title">
+                                <button class="btn btn-success fw-bold">Upload</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card bg-transparent border-0 mt-4">
+                        <h6 class="fw-bold mb-3 small text-readable-secondary ps-2 tracking-wider">ADD FROM YOUTUBE</h6>
+                        <form action="/playlists/<%= playlist.id %>" method="GET">
+                            <div class="comfy-search-box">
+                                <i class="bi bi-youtube search-icon text-danger"></i>
+                                <input type="text" name="search" class="form-control" placeholder="Search song..." value="<%= searchQuery %>">
+                                <input type="hidden" name="sort" value="<%= sortBy %>">
+                                <input type="hidden" name="filter" value="<%= filterQuery %>">
+                                <button class="btn-search">Go</button>
+                            </div>
+                        </form>
+                        <% if (searchResults.length > 0) { %>
+                            <div class="list-group mt-3">
+                                <% searchResults.forEach(vid => { %>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 shadow-sm" style="background: rgba(30, 30, 50, 0.6); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 8px; border-radius: 12px; backdrop-filter: blur(5px);">
+                                        <div class="d-flex align-items-center gap-3 text-truncate">
+                                            <img src="<%= vid.thumbnail %>" width="40" style="border-radius: 6px;">
+                                            <span class="small fw-bold text-white"><%= vid.title %></span>
+                                        </div>
+                                        <form action="/playlists/<%= playlist.id %>/add" method="POST">
+                                            <input type="hidden" name="videoId" value="<%= vid.videoId %>">
+                                            <input type="hidden" name="title" value="<%= vid.title %>">
+                                            <input type="hidden" name="thumbnailUrl" value="<%= vid.thumbnail %>">
+                                            <button class="btn btn-sm btn-link text-success p-0 fw-bold small text-decoration-none border border-success rounded-pill px-3 py-1 hover-bg-success">+ Add</button>
+                                        </form>
+                                    </div>
+                                <% }) %>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="card h-100 shadow-lg border-0" style="background: rgba(0,0,0,0.2); backdrop-filter: blur(10px); border-radius: 16px;">
+                        <div class="card-header bg-transparent border-bottom border-secondary border-opacity-25 p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="fw-bold text-white"><i class="bi bi-list-ol me-2 text-primary"></i>Queue</span>
+                                <span class="badge bg-primary rounded-pill" id="songCountBadge"><%= songs.length %></span>
+                            </div>
+                            
+                            <div class="row g-2 align-items-center">
+                                <div class="col-7">
+                                    <div class="comfy-search-box queue-filter-box">
+                                        <i class="bi bi-filter me-2 text-readable-secondary"></i>
+                                        <input type="text" id="playlistFilter" class="form-control" placeholder="Filter playlist..." style="font-size: 0.9rem;">
+                                    </div>
+                                </div>
+                                <div class="col-5">
+                                    <form action="/playlists/<%= playlist.id %>" method="GET" class="h-100">
+                                        <select name="sort" class="form-select comfy-select" onchange="this.form.submit()">
+                                            <option value="default" <%= sortBy === 'default' ? 'selected' : '' %>>Default</option>
+                                            <option value="name_asc" <%= sortBy === 'name_asc' ? 'selected' : '' %>>A-Z</option>
+                                            <option value="rating_desc" <%= sortBy === 'rating_desc' ? 'selected' : '' %>>Rating</option>
+                                        </select>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-body p-2 overflow-auto custom-scrollbar" style="max-height: 600px;">
+                            <div class="list-group list-group-flush gap-1" id="playlistQueue">
+                                <% songs.forEach((song, index) => { %>
+                                    <div class="list-group-item queue-item border-0 rounded p-2 transition-all <%= currentSong && song.id === currentSong.id ? 'bg-primary bg-opacity-25' : 'bg-transparent' %>">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <a href="/playlists/<%= playlist.id %>?play=<%= song.videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="text-decoration-none text-white w-100 me-2">
+                                                <div class="d-flex align-items-center gap-3">
+                                                    <span class="text-readable-secondary small fw-bold" style="width: 20px;"><%= index + 1 %></span>
+                                                    <% if (song.source === 'local') { %> 
+                                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white flex-shrink-0" style="width: 45px; height: 45px;"><i class="bi bi-mic-fill"></i></div> 
+                                                    <% } else { %> 
+                                                        <img src="<%= song.thumbnailUrl %>" width="45" height="45" class="rounded object-fit-cover flex-shrink-0"> 
+                                                    <% } %>
+                                                    <div class="d-flex flex-column" style="min-width: 0;">
+                                                        <div class="fw-bold small text-white text-truncate song-title"><%= song.title %></div>
+                                                        <div class="d-flex align-items-center mt-1">
+                                                            <% for(let i=1; i<=10; i++) { %>
+                                                                <form action="/playlists/<%= playlist.id %>/rate" method="POST" style="display:inline; margin:0;">
+                                                                    <input type="hidden" name="songId" value="<%= song.id %>">
+                                                                    <input type="hidden" name="rating" value="<%= i %>">
+                                                                    <button type="submit" class="rating-btn"><i class="bi bi-star-fill rating-star-small <%= song.rating >= i ? 'checked' : '' %>"></i></button>
+                                                                </form>
+                                                            <% } %>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                            <form action="/playlists/<%= playlist.id %>/remove" method="POST" class="ms-2">
+                                                <input type="hidden" name="songId" value="<%= song.id %>">
+                                                <button class="btn btn-link text-readable-secondary hover-danger p-0" style="font-size: 0.9rem;"><i class="bi bi-x-lg"></i></button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                <% }) %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="createModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="/playlists/create" method="POST" class="modal-content">
+                <div class="modal-header border-0 pb-0"><h5 class="modal-title fw-bold">New Playlist</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body"><input type="text" name="name" class="form-control" placeholder="Name" required></div>
+                <div class="modal-footer border-0 pt-0"><button type="submit" class="btn btn-custom w-100">Create</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal fade" id="renameModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="/playlists/rename" method="POST" class="modal-content">
+                <div class="modal-header border-0 pb-0"><h5 class="modal-title fw-bold">Rename Playlist</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" value="<%= playlist.id %>">
+                    <input type="text" name="name" class="form-control" value="<%= playlist.name %>" required>
+                </div>
+                <div class="modal-footer border-0 pt-0"><button type="submit" class="btn btn-success w-100">Save</button></div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    
+    <script>
+        // --- YOUTUBE AUTO NEXT ---
+        var player;
+        function onYouTubeIframeAPIReady() {
+            var iframe = document.getElementById('yt-player');
+            if(iframe) { player = new YT.Player('yt-player', { events: { 'onStateChange': onPlayerStateChange } }); }
+        }
+        function onPlayerStateChange(event) {
+            if (event.data === 0) { if(nextSongUrl && nextSongUrl !== "") window.location.href = nextSongUrl; }
+        }
+        
+        // --- INSTANT FILTER ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterInput = document.getElementById('playlistFilter');
+            const queueItems = document.querySelectorAll('.queue-item');
+            if(filterInput) {
+                filterInput.addEventListener('keyup', function() {
+                    const filterValue = this.value.toLowerCase();
+                    queueItems.forEach(item => {
+                        const titleEl = item.querySelector('.song-title');
+                        const title = titleEl ? titleEl.innerText.toLowerCase() : '';
+                        item.style.display = title.includes(filterValue) ? '' : 'none';
+                    });
+                });
+            }
+        });
+
+        // --- DRAG & DROP LOGIC ---
+        const draggables = document.querySelectorAll('.playlist-item');
+        const container = document.getElementById('playlist-list');
+
+        draggables.forEach(draggable => {
+            draggable.addEventListener('dragstart', () => {
+                draggable.classList.add('dragging');
+                container.classList.add('dragging-active');
+            });
+
+            draggable.addEventListener('dragend', () => {
+                draggable.classList.remove('dragging');
+                container.classList.remove('dragging-active');
+                saveNewOrder(); // Save to server
+            });
+        });
+
+        container.addEventListener('dragover', e => {
+            e.preventDefault();
+            const afterElement = getDragAfterElement(container, e.clientY);
+            const draggable = document.querySelector('.dragging');
+            if (afterElement == null) {
+                container.appendChild(draggable);
+            } else {
+                container.insertBefore(draggable, afterElement);
+            }
+        });
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.playlist-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function saveNewOrder() {
+            const items = container.querySelectorAll('.playlist-item');
+            const orderedIds = Array.from(items).map(item => item.getAttribute('data-id'));
+            
+            fetch('/playlists/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order: orderedIds })
+            }).then(res => res.json()).then(data => {
+                console.log('Order saved:', data);
+            }).catch(err => console.error('Error saving order:', err));
+        }
+    </script>
+</body>
+</html>

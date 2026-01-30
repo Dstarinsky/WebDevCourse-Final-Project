@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Favorites</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+    
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-music-note-beamed"></i> MyMusicApp</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-center gap-3">
+                    <li class="nav-item"><a href="/" class="nav-link text-white">Home</a></li>
+                    <li class="nav-item"><a href="/favorites" class="nav-link text-white active">Favorites & Search</a></li>
+                    <li class="nav-item"><a href="/playlists" class="nav-link text-white">My Playlists</a></li>
+                    <li class="nav-item border-start ps-3 border-secondary d-flex align-items-center gap-2">
+                        <span class="text-white fw-bold"><%= user.firstName %></span>
+                        <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+
+        <div class="text-center mb-4">
+            <h2 class="fw-bold display-6" style="background: linear-gradient(to right, #fff, var(--color-neon)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Search YouTube</h2>
+        </div>
+
+        <div class="row justify-content-center mb-5">
+            <div class="col-lg-8">
+                <form action="/favorites" method="GET">
+                    <div class="comfy-search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input type="text" name="search" class="form-control" placeholder="Search for songs..." value="<%= searchQuery || '' %>" autocomplete="off">
+                        <button class="btn btn-search">Search</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <% if (searchResults.length > 0) { %>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-white"><i class="bi bi-globe me-2 text-primary"></i>Search Results</h5>
+            </div>
+
+            <div class="row g-4 mb-5 pb-5 border-bottom border-secondary border-opacity-25">
+                <% searchResults.forEach(video => { %>
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card h-100 border-0 p-3 song-card-horizontal" style="background: rgba(255,255,255,0.03);">
+                            
+                            <div class="img-hover-container mb-3 shadow rounded" style="height: 140px;" onclick="openPlayModal('<%= video.videoId %>')">
+                                <img src="<%= video.thumbnail %>" class="w-100 h-100 object-fit-cover">
+                                <div class="play-overlay"><i class="bi bi-play-circle-fill"></i></div>
+                            </div>
+                            
+                            <h6 class="text-truncate-2 fw-bold text-white mb-3" style="min-height: 40px; font-size: 0.9rem;"><%= video.title %></h6>
+                            
+                            <div class="d-flex flex-column gap-2 mt-auto">
+                                <% if (video.isFavorite) { %>
+                                    <button class="btn btn-outline-success w-100 btn-sm disabled"><i class="bi bi-check-lg"></i> Favorite</button>
+                                <% } else { %>
+                                    <form action="/favorites/add" method="POST">
+                                        <input type="hidden" name="videoId" value="<%= video.videoId %>">
+                                        <input type="hidden" name="title" value="<%= video.title %>">
+                                        <input type="hidden" name="thumbnailUrl" value="<%= video.thumbnail %>">
+                                        <input type="hidden" name="currentSearch" value="<%= searchQuery %>">
+                                        <button class="btn btn-outline-custom w-100 btn-sm"><i class="bi bi-heart"></i> Favorite</button>
+                                    </form>
+                                <% } %>
+
+                                <button type="button" class="btn btn-sm btn-outline-light border-secondary"
+                                        onclick="openAddModal('<%= video.videoId %>', '<%= video.title.replace(/'/g, "\\'") %>', '<%= video.thumbnail %>')">
+                                    <i class="bi bi-plus-lg"></i> Playlist
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } %>
+
+        <div class="d-flex align-items-center mb-4 mt-4">
+            <i class="bi bi-heart-fill text-danger fs-3 me-3"></i>
+            <h3 class="fw-bold text-white mb-0">My Saved Videos</h3>
+            <span class="badge bg-secondary ms-2 rounded-pill"><%= favorites.length %></span>
+        </div>
+
+        <% if (favorites.length === 0) { %>
+            <div class="text-center py-5 bg-dark rounded-4 border border-secondary border-opacity-10">
+                <i class="bi bi-heartbreak display-1 text-secondary opacity-25"></i>
+                <p class="text-muted mt-3">You haven't saved any videos yet.</p>
+            </div>
+        <% } else { %>
+            <div class="row g-4">
+                <% favorites.forEach(fav => { %>
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card h-100 border-0 p-2" style="background: var(--card-bg); border: 1px solid rgba(142, 45, 226, 0.2); border-radius: 12px;">
+                            <div class="position-relative">
+                                <div class="img-hover-container rounded mb-2" style="aspect-ratio: 16/9;" onclick="openPlayModal('<%= fav.videoId %>')">
+                                    <img src="<%= fav.thumbnailUrl %>" class="w-100 h-100 object-fit-cover">
+                                    <div class="play-overlay"><i class="bi bi-play-circle-fill"></i></div>
+                                </div>
+
+                                <form action="/favorites/remove" method="POST" class="position-absolute top-0 end-0 p-1" style="z-index: 10;">
+                                    <input type="hidden" name="videoId" value="<%= fav.videoId %>">
+                                    <button class="btn btn-sm btn-danger rounded-circle shadow-sm" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                                        <i class="bi bi-trash-fill" style="font-size: 0.8rem;"></i>
+                                    </button>
+                                </form>
+                            </div>
+                            
+                            <h6 class="text-truncate fw-bold text-white mb-1 px-1"><%= fav.title %></h6>
+                            
+                            <button class="btn btn-sm btn-link text-readable-secondary text-decoration-none px-1 text-start" 
+                                    onclick="openAddModal('<%= fav.videoId %>', '<%= fav.title.replace(/'/g, "\\'") %>', '<%= fav.thumbnailUrl %>')">
+                                <i class="bi bi-plus-lg"></i> Add to Playlist
+                            </button>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } %>
+
+    </div>
+
+    <div class="modal fade" id="addToPlaylistModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="/playlists/add-from-search" method="POST" class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-white">Add to Playlist</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="videoId" id="modalVideoId">
+                    <input type="hidden" name="title" id="modalTitle">
+                    <input type="hidden" name="thumbnailUrl" id="modalThumbnail">
+                    <input type="hidden" name="currentSearch" value="<%= searchQuery %>">
+
+                    <div class="mb-3">
+                        <label class="form-label text-secondary small fw-bold">Choose existing playlist</label>
+                        <select name="existingPlaylistId" class="form-select" id="existingSelect">
+                            <option value="" selected>-- Select a playlist --</option>
+                            <% playlists.forEach(p => { %>
+                                <option value="<%= p.id %>"><%= p.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="text-center text-muted my-2 small fw-bold">- OR -</div>
+                    <div class="mb-3">
+                        <label class="form-label text-secondary small fw-bold">Create new playlist</label>
+                        <input type="text" name="newPlaylistName" class="form-control" placeholder="e.g. Chill Vibes" id="newInput">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="submit" class="btn btn-custom w-100">Save Song</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal fade" id="playModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content bg-black border-secondary">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title text-white">Preview</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="ratio ratio-16x9">
+                        <iframe id="previewIframe" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <% if (addedToPlaylistName && addedToPlaylistId) { %>
+        <div class="toast-container position-fixed bottom-0 end-0 p-3">
+            <div id="successToast" class="toast align-items-center text-bg-success border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body fw-bold">
+                        <i class="bi bi-check-circle-fill me-2"></i> 
+                        Added to <strong><%= addedToPlaylistName %></strong>!
+                        <a href="/playlists/<%= addedToPlaylistId %>" class="text-white text-decoration-underline ms-3">View Playlist</a>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        </div>
+    <% } %>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // LOGIC FOR ADD MODAL
+        function openAddModal(videoId, title, thumbnail) {
+            document.getElementById('modalVideoId').value = videoId;
+            document.getElementById('modalTitle').value = title;
+            document.getElementById('modalThumbnail').value = thumbnail;
+            
+            const existingSelect = document.getElementById('existingSelect');
+            const newInput = document.getElementById('newInput');
+            newInput.addEventListener('input', () => { if(newInput.value.length > 0) existingSelect.value = ""; });
+            existingSelect.addEventListener('change', () => { if(existingSelect.value !== "") newInput.value = ""; });
+
+            const modal = new bootstrap.Modal(document.getElementById('addToPlaylistModal'));
+            modal.show();
+        }
+
+        // LOGIC FOR PLAY PREVIEW MODAL
+        const playModalEl = document.getElementById('playModal');
+        const previewIframe = document.getElementById('previewIframe');
+        const playModal = new bootstrap.Modal(playModalEl);
+
+        function openPlayModal(videoId) {
+            previewIframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+            playModal.show();
+        }
+
+        playModalEl.addEventListener('hidden.bs.modal', event => {
+            previewIframe.src = ""; 
+        });
+    </script>
+</body>
+</html>
