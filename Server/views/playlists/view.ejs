@@ -1,31 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= playlist.name %></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="/css/style.css" rel="stylesheet">
-    <style>
-        .sidebar { background-color: var(--card-bg); border-right: 1px solid rgba(255,255,255,0.05); }
-        .active-playlist { background: linear-gradient(90deg, var(--color-electric), var(--color-shock)) !important; color: white !important; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        .rating-star-small { color: rgba(255,255,255,0.15); cursor: pointer; font-size: 0.65rem; transition: 0.2s; margin-right: 1px; }
-        .rating-star-small.checked { color: var(--color-neon); text-shadow: 0 0 5px var(--color-neon); }
-        .rating-btn { background: none; border: none; padding: 0; line-height: 0; }
-        .queue-item:hover { background-color: rgba(255,255,255,0.05); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
-    </style>
 </head>
-<body style="overflow: hidden;"> 
-    
+<body class="app-shell">
+
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="/"><i class="bi bi-music-note-beamed"></i> MyMusicApp</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -43,14 +35,14 @@
     </nav>
 
     <div class="row g-0">
-        <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column d-none d-md-flex" style="height: calc(100vh - 56px);">
+        <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column d-none d-md-flex app-pane">
             <div class="d-flex justify-content-between align-items-center mb-4 px-2">
-                <h6 class="text-uppercase text-readable-secondary fw-bold small mb-0">My Playlists</h6>
-                <button class="btn btn-outline-primary btn-square" data-bs-toggle="modal" data-bs-target="#createModal">
-                    <i class="bi bi-plus text-lg"></i>
+                <h6 class="label-caps text-readable-secondary mb-0">My Playlists</h6>
+                <button class="btn btn-square" data-bs-toggle="modal" data-bs-target="#createModal" aria-label="Create playlist">
+                    <i class="bi bi-plus fs-5"></i>
                 </button>
             </div>
-            
+
             <div id="playlist-list" class="d-flex flex-column gap-2 overflow-auto custom-scrollbar playlist-container" style="flex: 1;">
                 <% playlists.forEach((p) => { %>
                     <div class="playlist-item" draggable="true" data-id="<%= p.id %>">
@@ -63,12 +55,15 @@
             </div>
         </div>
 
-        <div class="col-md-9 col-lg-10 p-4" style="height: calc(100vh - 56px); overflow-y: auto;">
-            
+        <div class="col-md-9 col-lg-10 p-4 app-pane" style="overflow-y: auto;">
+
             <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-3" style="border-color: rgba(255,255,255,0.1) !important;">
-                <div class="d-flex align-items-center gap-3">
-                    <h3 class="fw-bold mb-0 text-white"><%= playlist.name %></h3>
-                    <button class="btn btn-link text-readable-secondary p-0" data-bs-toggle="modal" data-bs-target="#renameModal"><i class="bi bi-pencil-square"></i></button>
+                <div class="d-flex align-items-center gap-2 gap-md-3" style="min-width:0;">
+                    <button class="btn btn-square d-md-none flex-shrink-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#playlistDrawer" aria-controls="playlistDrawer" aria-label="Show playlists">
+                        <i class="bi bi-list fs-5"></i>
+                    </button>
+                    <h3 class="fw-bold mb-0 text-white text-truncate"><%= playlist.name %></h3>
+                    <button class="btn btn-link text-readable-secondary p-0 flex-shrink-0" data-bs-toggle="modal" data-bs-target="#renameModal" aria-label="Rename playlist"><i class="bi bi-pencil-square"></i></button>
                 </div>
                 <form action="/playlists/delete" method="POST" onsubmit="return confirm('Delete this playlist permanently?');">
                     <input type="hidden" name="id" value="<%= playlist.id %>">
@@ -88,13 +83,13 @@
 
             <div class="row">
                 <div class="col-lg-7 mb-4">
-                    <div class="ratio ratio-16x9 bg-black rounded-4 shadow-lg mb-4 position-relative overflow-hidden" style="border: 1px solid rgba(255,255,255,0.1);">
+                    <div id="playerArea" class="ratio ratio-16x9 bg-black rounded-4 shadow-lg mb-4 position-relative overflow-hidden" style="border: 1px solid rgba(255,255,255,0.1);">
                         <% if (currentSong) { %>
                             <% if (currentSong.source === 'local') { %>
                                 <div class="d-flex flex-column align-items-center justify-content-center h-100 bg-dark text-white">
                                     <div class="bg-secondary rounded-circle p-4 mb-3 bg-opacity-25"><i class="bi bi-music-note-beamed display-1 text-white"></i></div>
                                     <h4 class="mb-4 fw-bold"><%= currentSong.title %></h4>
-                                    <audio controls autoplay onended="if(nextSongUrl) window.location.href = nextSongUrl;" style="width: 80%;">
+                                    <audio id="localAudio" controls autoplay onended="if(window.__playNext){window.__playNext();}else if(nextSongUrl){window.location.href = nextSongUrl;}" style="width: 80%;">
                                         <source src="/uploads/<%= currentSong.videoId %>" type="audio/mpeg">
                                     </audio>
                                 </div>
@@ -110,64 +105,61 @@
 
                     <div class="card border-0 shadow-sm mb-4 bg-transparent">
                         <div class="d-flex justify-content-between align-items-center p-3 rounded-pill" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.05);">
-                            <div class="btn-group">
-                                <a href="<%= prevLink %>" class="btn btn-outline-light border-0 <%= currentIndex <= 0 ? 'disabled' : '' %>"><i class="bi bi-skip-start-fill fs-4"></i></a>
+                            <div class="d-flex align-items-center gap-2">
+                                <% const prevDisabled = currentIndex <= 0; %>
+                                <a id="btnPrev" <%= prevDisabled ? '' : `href="${prevLink}"` %> class="btn btn-outline-light border-0 d-flex align-items-center <%= prevDisabled ? 'disabled' : '' %>" <%= prevDisabled ? 'aria-disabled="true" tabindex="-1"' : '' %> aria-label="Previous song"><i class="bi bi-skip-start-fill fs-4"></i></a>
                                 <% if (songs.length > 0) { %>
-                                    <a href="/playlists/<%= playlist.id %>?play=<%= songs[0].videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="btn btn-primary rounded-pill px-4 mx-2 fw-bold shadow-sm" style="
-                                        display: flex;
-                                        align-items: center;
-                                    "><i class="bi bi-play-circle-fill me-2"></i> Play All</a>
+                                    <a id="btnPlayAll" href="/playlists/<%= playlist.id %>?play=<%= songs[0].videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="btn btn-custom rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center"><i class="bi bi-play-circle-fill me-2"></i> Play All</a>
                                 <% } %>
-                                <a href="<%= nextLink || '#' %>" class="btn btn-outline-light border-0 <%= currentIndex >= songs.length - 1 ? 'disabled' : '' %>"><i class="bi bi-skip-end-fill fs-4"></i></a>
+                                <% const nextDisabled = currentIndex >= songs.length - 1; %>
+                                <a id="btnNext" <%= nextDisabled ? '' : `href="${nextLink}"` %> class="btn btn-outline-light border-0 d-flex align-items-center <%= nextDisabled ? 'disabled' : '' %>" <%= nextDisabled ? 'aria-disabled="true" tabindex="-1"' : '' %> aria-label="Next song"><i class="bi bi-skip-end-fill fs-4"></i></a>
                             </div>
                             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-toggle="collapse" data-bs-target="#uploadSection"><i class="bi bi-cloud-upload"></i> Upload</button>
                         </div>
                     </div>
                     
                     <div class="collapse mb-4" id="uploadSection">
-                        <div class="card card-body bg-dark border-secondary">
-                            <form action="/playlists/<%= playlist.id %>/upload" method="POST" enctype="multipart/form-data" class="d-flex gap-2">
-                                <input type="file" name="mp3file" class="form-control bg-secondary text-white border-0" accept="audio/*" required>
-                                <input type="text" name="title" class="form-control bg-secondary text-white border-0" placeholder="Song Title">
-                                <button class="btn btn-success fw-bold">Upload</button>
+                        <div class="card card-body glass-card--flat border-0">
+                            <form action="/playlists/<%= playlist.id %>/upload" method="POST" enctype="multipart/form-data" class="d-flex flex-column flex-sm-row gap-2">
+                                <input type="file" name="mp3file" class="form-control" accept="audio/*" required aria-label="MP3 file">
+                                <input type="text" name="title" class="form-control" placeholder="Song Title" aria-label="Song title">
+                                <button class="btn btn-custom fw-bold flex-shrink-0">Upload</button>
                             </form>
                         </div>
                     </div>
 
                     <div class="card bg-transparent border-0 mt-4">
-                        <h6 class="fw-bold mb-3 small text-readable-secondary ps-2 tracking-wider">ADD FROM YOUTUBE</h6>
-                        <form action="/playlists/<%= playlist.id %>" method="GET">
+                        <h6 class="label-caps mb-3 text-readable-secondary ps-2">ADD FROM YOUTUBE</h6>
+                        <form id="ytSearchForm" action="/playlists/<%= playlist.id %>" method="GET">
                             <div class="comfy-search-box">
                                 <i class="bi bi-youtube search-icon text-danger"></i>
-                                <input type="text" name="search" class="form-control" placeholder="Search song..." value="<%= searchQuery %>">
+                                <input id="ytSearchInput" type="text" name="search" class="form-control" placeholder="Search song..." value="<%= searchQuery %>" autocomplete="off">
                                 <input type="hidden" name="sort" value="<%= sortBy %>">
                                 <input type="hidden" name="filter" value="<%= filterQuery %>">
                                 <button class="btn-search">Go</button>
                             </div>
                         </form>
-                        <% if (searchResults.length > 0) { %>
-                            <div class="list-group mt-3">
-                                <% searchResults.forEach(vid => { %>
-                                    <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 shadow-sm" style="background: rgba(30, 30, 50, 0.6); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 8px; border-radius: 12px; backdrop-filter: blur(5px);">
-                                        <div class="d-flex align-items-center gap-3 text-truncate">
-                                            <img src="<%= vid.thumbnail %>" width="40" style="border-radius: 6px;">
-                                            <span class="small fw-bold text-white"><%= vid.title %></span>
-                                        </div>
-                                        <form action="/playlists/<%= playlist.id %>/add" method="POST">
-                                            <input type="hidden" name="videoId" value="<%= vid.videoId %>">
-                                            <input type="hidden" name="title" value="<%= vid.title %>">
-                                            <input type="hidden" name="thumbnailUrl" value="<%= vid.thumbnail %>">
-                                            <button class="btn btn-sm btn-link text-success p-0 fw-bold small text-decoration-none border border-success rounded-pill px-3 py-1 hover-bg-success">+ Add</button>
-                                        </form>
+                        <div id="ytResults" class="list-group mt-3">
+                            <% searchResults.forEach(vid => { %>
+                                <div class="list-group-item glass-card--flat d-flex justify-content-between align-items-center py-2 px-3 shadow-sm" style="margin-bottom: 8px;">
+                                    <div class="d-flex align-items-center gap-3 text-truncate">
+                                        <img src="<%= vid.thumbnail %>" alt="Thumbnail for <%= vid.title %>" width="40" style="border-radius: 6px;">
+                                        <span class="small fw-bold text-white text-truncate"><%= vid.title %></span>
                                     </div>
-                                <% }) %>
-                            </div>
-                        <% } %>
+                                    <form action="/playlists/<%= playlist.id %>/add" method="POST" class="yt-add-form">
+                                        <input type="hidden" name="videoId" value="<%= vid.videoId %>">
+                                        <input type="hidden" name="title" value="<%= vid.title %>">
+                                        <input type="hidden" name="thumbnailUrl" value="<%= vid.thumbnail %>">
+                                        <button class="btn btn-sm fw-bold small border border-success text-success rounded-pill px-3 py-1 hover-bg-success flex-shrink-0">+ Add</button>
+                                    </form>
+                                </div>
+                            <% }) %>
+                        </div>
                     </div>
                 </div>
 
                 <div class="col-lg-5">
-                    <div class="card h-100 shadow-lg border-0" style="background: rgba(0,0,0,0.2); backdrop-filter: blur(10px); border-radius: 16px;">
+                    <div class="card glass-card h-100 shadow-lg border-0">
                         <div class="card-header bg-transparent border-bottom border-secondary border-opacity-25 p-3">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="fw-bold text-white"><i class="bi bi-list-ol me-2 text-primary"></i>Queue</span>
@@ -182,13 +174,11 @@
                                     </div>
                                 </div>
                                 <div class="col-5">
-                                    <form action="/playlists/<%= playlist.id %>" method="GET" class="h-100">
-                                        <select name="sort" class="form-select comfy-select" onchange="this.form.submit()">
-                                            <option value="default" <%= sortBy === 'default' ? 'selected' : '' %>>Default</option>
-                                            <option value="name_asc" <%= sortBy === 'name_asc' ? 'selected' : '' %>>A-Z</option>
-                                            <option value="rating_desc" <%= sortBy === 'rating_desc' ? 'selected' : '' %>>Rating</option>
-                                        </select>
-                                    </form>
+                                    <select id="sortSelect" class="form-select comfy-select" aria-label="Sort queue">
+                                        <option value="default" <%= sortBy === 'default' ? 'selected' : '' %>>Default</option>
+                                        <option value="name_asc" <%= sortBy === 'name_asc' ? 'selected' : '' %>>A-Z</option>
+                                        <option value="rating_desc" <%= sortBy === 'rating_desc' ? 'selected' : '' %>>Rating</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -196,33 +186,37 @@
                         <div class="card-body p-2 overflow-auto custom-scrollbar" style="max-height: 600px;">
                             <div class="list-group list-group-flush gap-1" id="playlistQueue">
                                 <% songs.forEach((song, index) => { %>
-                                    <div class="list-group-item queue-item border-0 rounded p-2 transition-all <%= currentSong && song.id === currentSong.id ? 'bg-primary bg-opacity-25' : 'bg-transparent' %>">
+                                    <% const playUrl = `/playlists/${playlist.id}?play=${song.videoId}&sort=${sortBy}&filter=${filterQuery}`; %>
+                                    <div class="list-group-item queue-item border-0 rounded p-2 <%= currentSong && song.id === currentSong.id ? 'playing' : '' %>"
+                                         data-song-id="<%= song.id %>" data-video-id="<%= song.videoId %>" data-source="<%= song.source %>"
+                                         data-title="<%= song.title.replace(/"/g, '&quot;') %>" data-thumb="<%= song.thumbnailUrl %>" data-rating="<%= song.rating %>">
                                         <div class="d-flex justify-content-between align-items-center">
-                                            <a href="/playlists/<%= playlist.id %>?play=<%= song.videoId %>&sort=<%= sortBy %>&filter=<%= filterQuery %>" class="text-decoration-none text-white w-100 me-2">
-                                                <div class="d-flex align-items-center gap-3">
-                                                    <span class="text-readable-secondary small fw-bold" style="width: 20px;"><%= index + 1 %></span>
-                                                    <% if (song.source === 'local') { %> 
-                                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white flex-shrink-0" style="width: 45px; height: 45px;"><i class="bi bi-mic-fill"></i></div> 
-                                                    <% } else { %> 
-                                                        <img src="<%= song.thumbnailUrl %>" width="45" height="45" class="rounded object-fit-cover flex-shrink-0"> 
+                                            <div class="d-flex align-items-center gap-3" style="min-width: 0; flex: 1;">
+                                                <span class="queue-index text-readable-secondary small fw-bold flex-shrink-0" style="width: 20px;"><%= index + 1 %></span>
+                                                <a href="<%= playUrl %>" class="play-link flex-shrink-0 d-block" aria-label="Play <%= song.title %>">
+                                                    <% if (song.source === 'local') { %>
+                                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white" style="width: 45px; height: 45px;"><i class="bi bi-mic-fill"></i></div>
+                                                    <% } else { %>
+                                                        <img src="<%= song.thumbnailUrl %>" alt="Thumbnail for <%= song.title %>" width="45" height="45" class="rounded object-fit-cover">
                                                     <% } %>
-                                                    <div class="d-flex flex-column" style="min-width: 0;">
-                                                        <div class="fw-bold small text-white text-truncate song-title"><%= song.title %></div>
-                                                        <div class="d-flex align-items-center mt-1">
-                                                            <% for(let i=1; i<=10; i++) { %>
-                                                                <form action="/playlists/<%= playlist.id %>/rate" method="POST" style="display:inline; margin:0;">
-                                                                    <input type="hidden" name="songId" value="<%= song.id %>">
-                                                                    <input type="hidden" name="rating" value="<%= i %>">
-                                                                    <button type="submit" class="rating-btn"><i class="bi bi-star-fill rating-star-small <%= song.rating >= i ? 'checked' : '' %>"></i></button>
-                                                                </form>
-                                                            <% } %>
-                                                        </div>
+                                                </a>
+                                                <div class="d-flex flex-column" style="min-width: 0;">
+                                                    <a href="<%= playUrl %>" class="play-link fw-bold small text-white text-truncate song-title text-decoration-none"><%= song.title %></a>
+                                                    <%# Rating row — sibling of the play links, NOT nested inside an <a> %>
+                                                    <div class="d-flex align-items-center mt-1 rating-row">
+                                                        <% for(let i=1; i<=10; i++) { %>
+                                                            <form action="/playlists/<%= playlist.id %>/rate" method="POST" class="rate-form d-inline m-0">
+                                                                <input type="hidden" name="songId" value="<%= song.id %>">
+                                                                <input type="hidden" name="rating" value="<%= i %>">
+                                                                <button type="submit" class="rating-btn" data-star="<%= i %>" aria-label="Rate <%= i %> of 10"><i class="bi bi-star-fill rating-star-small <%= song.rating >= i ? 'checked' : '' %>"></i></button>
+                                                            </form>
+                                                        <% } %>
                                                     </div>
                                                 </div>
-                                            </a>
-                                            <form action="/playlists/<%= playlist.id %>/remove" method="POST" class="ms-2">
+                                            </div>
+                                            <form action="/playlists/<%= playlist.id %>/remove" method="POST" class="remove-form ms-2">
                                                 <input type="hidden" name="songId" value="<%= song.id %>">
-                                                <button class="btn btn-link text-readable-secondary hover-danger p-0" style="font-size: 0.9rem;"><i class="bi bi-x-lg"></i></button>
+                                                <button class="btn btn-link text-readable-secondary hover-danger p-0" style="font-size: 1rem;" aria-label="Remove from queue"><i class="bi bi-x-lg"></i></button>
                                             </form>
                                         </div>
                                     </div>
@@ -253,8 +247,25 @@
                     <input type="hidden" name="id" value="<%= playlist.id %>">
                     <input type="text" name="name" class="form-control" value="<%= playlist.name %>" required>
                 </div>
-                <div class="modal-footer border-0 pt-0"><button type="submit" class="btn btn-success w-100">Save</button></div>
+                <div class="modal-footer border-0 pt-0"><button type="submit" class="btn btn-custom w-100">Save</button></div>
             </form>
+        </div>
+    </div>
+
+    <!-- Mobile playlist drawer (sidebar is hidden under md) -->
+    <div class="offcanvas offcanvas-start sidebar" tabindex="-1" id="playlistDrawer" aria-labelledby="playlistDrawerLabel">
+        <div class="offcanvas-header">
+            <h6 class="offcanvas-title label-caps text-readable-secondary mb-0" id="playlistDrawerLabel">My Playlists</h6>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column gap-2">
+            <button class="btn btn-outline-custom w-100 mb-2" data-bs-toggle="modal" data-bs-target="#createModal"><i class="bi bi-plus-lg me-1"></i> New Playlist</button>
+            <% playlists.forEach((p) => { %>
+                <a href="/playlists/<%= p.id %>" class="text-decoration-none p-2 px-3 rounded d-flex justify-content-between align-items-center playlist-link <%= p.id == playlist.id ? 'active-playlist fw-bold' : 'text-readable-secondary' %>">
+                    <span class="text-truncate"><%= p.name %></span>
+                    <% if (p.id == playlist.id) { %> <i class="bi bi-soundwave text-white ms-auto"></i> <% } %>
+                </a>
+            <% }) %>
         </div>
     </div>
 
@@ -262,85 +273,269 @@
     <script src="https://www.youtube.com/iframe_api"></script>
     
     <script>
-        // --- YOUTUBE AUTO NEXT ---
-        var player;
-        function onYouTubeIframeAPIReady() {
-            var iframe = document.getElementById('yt-player');
-            if(iframe) { player = new YT.Player('yt-player', { events: { 'onStateChange': onPlayerStateChange } }); }
+    (function () {
+        const PLAYLIST_ID = <%= playlist.id %>;
+        const AJAX_HEADERS = { 'X-Requested-With': 'fetch' };
+        const queueEl     = document.getElementById('playlistQueue');
+        const playerArea  = document.getElementById('playerArea');
+        const countBadge  = document.getElementById('songCountBadge');
+        const btnPrev     = document.getElementById('btnPrev');
+        const btnNext     = document.getElementById('btnNext');
+        const btnPlayAll  = document.getElementById('btnPlayAll');
+
+        let currentItem = queueEl ? queueEl.querySelector('.queue-item.playing') : null;
+        let ytPlayer = null, ytApiReady = false, pendingVideoId = null;
+
+        const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const formBody = form => new URLSearchParams(new FormData(form));
+
+        /* ---------------- PLAYER (in-place, never reloads the page) ---------------- */
+        window.onYouTubeIframeAPIReady = function () {
+            ytApiReady = true;
+            const existing = document.getElementById('yt-player'); // server-rendered first song
+            if (existing) {
+                ytPlayer = new YT.Player('yt-player', { events: { onStateChange: onYtState } });
+            } else if (pendingVideoId) {
+                const v = pendingVideoId; pendingVideoId = null; mountYouTube(v);
+            }
+        };
+        function onYtState(e) { if (e.data === 0) playNext(); } // 0 = ended
+
+        function mountYouTube(videoId) {
+            playerArea.innerHTML = '<div id="ytmount"></div>';
+            if (!ytApiReady) { pendingVideoId = videoId; return; }
+            ytPlayer = new YT.Player('ytmount', {
+                videoId: videoId,
+                playerVars: { autoplay: 1, enablejsapi: 1, rel: 0 },
+                events: { onStateChange: onYtState }
+            });
         }
-        function onPlayerStateChange(event) {
-            if (event.data === 0) { if(nextSongUrl && nextSongUrl !== "") window.location.href = nextSongUrl; }
+        function mountLocal(videoId, title) {
+            ytPlayer = null;
+            playerArea.innerHTML =
+                '<div class="d-flex flex-column align-items-center justify-content-center h-100 bg-dark text-white">' +
+                  '<div class="bg-secondary rounded-circle p-4 mb-3 bg-opacity-25"><i class="bi bi-music-note-beamed display-1 text-white"></i></div>' +
+                  '<h4 class="mb-4 fw-bold">' + esc(title) + '</h4>' +
+                  '<audio id="localAudio" controls autoplay style="width:80%"><source src="/uploads/' + encodeURIComponent(videoId) + '" type="audio/mpeg"></audio>' +
+                '</div>';
+            const a = document.getElementById('localAudio');
+            if (a) a.onended = playNext;
         }
-        
-        // --- INSTANT FILTER ---
-        document.addEventListener('DOMContentLoaded', function() {
-            const filterInput = document.getElementById('playlistFilter');
-            const queueItems = document.querySelectorAll('.queue-item');
-            if(filterInput) {
-                filterInput.addEventListener('keyup', function() {
-                    const filterValue = this.value.toLowerCase();
-                    queueItems.forEach(item => {
-                        const titleEl = item.querySelector('.song-title');
-                        const title = titleEl ? titleEl.innerText.toLowerCase() : '';
-                        item.style.display = title.includes(filterValue) ? '' : 'none';
-                    });
-                });
+        function emptyHtml() {
+            return '<div class="d-flex align-items-center justify-content-center text-white h-100 bg-dark"><h4 class="text-readable-secondary">Playlist is empty</h4></div>';
+        }
+
+        function playItem(item) {
+            if (!item) return;
+            currentItem = item;
+            if (item.dataset.source === 'local') mountLocal(item.dataset.videoId, item.dataset.title);
+            else mountYouTube(item.dataset.videoId);
+            queueEl.querySelectorAll('.queue-item.playing').forEach(el => el.classList.remove('playing'));
+            item.classList.add('playing');
+            item.scrollIntoView({ block: 'nearest' });
+            updateTransport();
+        }
+        const visibleItems = () => Array.from(queueEl.querySelectorAll('.queue-item')).filter(el => el.style.display !== 'none');
+        function playNext() { const v = visibleItems(), i = v.indexOf(currentItem); if (i > -1 && i < v.length - 1) playItem(v[i + 1]); }
+        function playPrev() { const v = visibleItems(), i = v.indexOf(currentItem); if (i > 0) playItem(v[i - 1]); }
+
+        function setBtn(btn, disabled) {
+            if (!btn) return;
+            btn.classList.toggle('disabled', disabled);
+            if (disabled) { btn.setAttribute('aria-disabled', 'true'); btn.setAttribute('tabindex', '-1'); btn.removeAttribute('href'); }
+            else { btn.removeAttribute('aria-disabled'); btn.removeAttribute('tabindex'); btn.setAttribute('href', '#'); }
+        }
+        function updateTransport() {
+            const v = visibleItems(), i = v.indexOf(currentItem);
+            setBtn(btnPrev, i <= 0);
+            setBtn(btnNext, i < 0 || i >= v.length - 1);
+        }
+
+        if (queueEl) queueEl.addEventListener('click', e => {
+            const link = e.target.closest('.play-link'); if (!link) return;
+            e.preventDefault(); playItem(link.closest('.queue-item'));
+        });
+        if (btnNext)    btnNext.addEventListener('click',    e => { e.preventDefault(); playNext(); });
+        if (btnPrev)    btnPrev.addEventListener('click',    e => { e.preventDefault(); playPrev(); });
+        if (btnPlayAll) btnPlayAll.addEventListener('click', e => { e.preventDefault(); const v = visibleItems(); if (v.length) playItem(v[0]); });
+
+        /* ---------------- RATE + REMOVE (AJAX) ---------------- */
+        function renumber() {
+            let n = 1;
+            queueEl.querySelectorAll('.queue-item').forEach(it => { const idx = it.querySelector('.queue-index'); if (idx) idx.textContent = n++; });
+            if (countBadge) countBadge.textContent = queueEl.querySelectorAll('.queue-item').length;
+        }
+        function applyStars(item, rating) {
+            item.dataset.rating = rating;
+            item.querySelectorAll('.rating-btn').forEach(btn => {
+                const icon = btn.querySelector('i');
+                if (icon) icon.classList.toggle('checked', parseInt(btn.dataset.star, 10) <= rating);
+            });
+        }
+        if (queueEl) queueEl.addEventListener('submit', e => {
+            const form = e.target;
+            if (form.classList.contains('rate-form')) {
+                e.preventDefault();
+                const item = form.closest('.queue-item');
+                fetch(form.action, { method: 'POST', headers: AJAX_HEADERS, body: formBody(form) })
+                    .then(r => r.json()).then(d => { if (d.success) applyStars(item, d.rating); }).catch(() => {});
+            } else if (form.classList.contains('remove-form')) {
+                e.preventDefault();
+                const item = form.closest('.queue-item');
+                const v = visibleItems(); const after = v[v.indexOf(item) + 1];
+                fetch(form.action, { method: 'POST', headers: AJAX_HEADERS, body: formBody(form) })
+                    .then(r => r.json()).then(d => {
+                        if (!d.success) return;
+                        const wasCurrent = (item === currentItem);
+                        item.remove(); renumber();
+                        if (wasCurrent) {
+                            currentItem = null;
+                            const rest = visibleItems();
+                            if (after || rest.length) playItem(after || rest[0]);
+                            else playerArea.innerHTML = emptyHtml();
+                        }
+                        updateTransport();
+                    }).catch(() => {});
             }
         });
 
-        // --- DRAG & DROP LOGIC ---
-        const draggables = document.querySelectorAll('.playlist-item');
-        const container = document.getElementById('playlist-list');
-
-        draggables.forEach(draggable => {
-            draggable.addEventListener('dragstart', () => {
-                draggable.classList.add('dragging');
-                container.classList.add('dragging-active');
-            });
-
-            draggable.addEventListener('dragend', () => {
-                draggable.classList.remove('dragging');
-                container.classList.remove('dragging-active');
-                saveNewOrder(); // Save to server
-            });
-        });
-
-        container.addEventListener('dragover', e => {
+        /* ---------------- YOUTUBE SEARCH (AJAX) ---------------- */
+        const searchForm = document.getElementById('ytSearchForm');
+        const searchInput = document.getElementById('ytSearchInput');
+        const resultsEl = document.getElementById('ytResults');
+        if (searchForm) searchForm.addEventListener('submit', e => {
             e.preventDefault();
-            const afterElement = getDragAfterElement(container, e.clientY);
-            const draggable = document.querySelector('.dragging');
-            if (afterElement == null) {
-                container.appendChild(draggable);
-            } else {
-                container.insertBefore(draggable, afterElement);
+            const q = searchInput.value.trim(); if (!q) return;
+            resultsEl.innerHTML = '<div class="text-center text-readable-secondary small py-3">Searching…</div>';
+            fetch('/api/search?q=' + encodeURIComponent(q), { headers: AJAX_HEADERS })
+                .then(r => r.json()).then(d => renderResults(d.results || []))
+                .catch(() => { resultsEl.innerHTML = '<div class="text-center text-readable-secondary small py-3">Search failed.</div>'; });
+        });
+        function renderResults(results) {
+            if (!results.length) { resultsEl.innerHTML = '<div class="text-center text-readable-secondary small py-3">No results.</div>'; return; }
+            resultsEl.innerHTML = results.map(v =>
+                '<div class="list-group-item glass-card--flat d-flex justify-content-between align-items-center py-2 px-3 shadow-sm" style="margin-bottom:8px;">' +
+                  '<div class="d-flex align-items-center gap-3 text-truncate">' +
+                    '<img src="' + esc(v.thumbnail) + '" alt="Thumbnail for ' + esc(v.title) + '" width="40" style="border-radius:6px;">' +
+                    '<span class="small fw-bold text-white text-truncate">' + esc(v.title) + '</span>' +
+                  '</div>' +
+                  '<button class="btn btn-sm fw-bold small border border-success text-success rounded-pill px-3 py-1 hover-bg-success flex-shrink-0 add-result-btn" ' +
+                    'data-video-id="' + esc(v.videoId) + '" data-title="' + esc(v.title) + '" data-thumb="' + esc(v.thumbnail) + '">+ Add</button>' +
+                '</div>'
+            ).join('');
+        }
+
+        /* ---------------- ADD TO QUEUE (AJAX) ---------------- */
+        function markAdded(btn) {
+            btn.disabled = true;
+            btn.classList.remove('text-success', 'border-success');
+            btn.classList.add('text-readable-secondary');
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> Added';
+        }
+        if (resultsEl) {
+            resultsEl.addEventListener('click', e => {
+                const btn = e.target.closest('.add-result-btn'); if (!btn) return;
+                btn.disabled = true;
+                const body = new URLSearchParams({ videoId: btn.dataset.videoId, title: btn.dataset.title, thumbnailUrl: btn.dataset.thumb });
+                fetch('/playlists/' + PLAYLIST_ID + '/add', { method: 'POST', headers: AJAX_HEADERS, body })
+                    .then(r => r.json()).then(d => { if (d.success) { appendSong(d.song); markAdded(btn); } else btn.disabled = false; })
+                    .catch(() => { btn.disabled = false; });
+            });
+            // Server-rendered add forms (initial page) — submit without reload too
+            resultsEl.addEventListener('submit', e => {
+                const form = e.target.closest('.yt-add-form'); if (!form) return;
+                e.preventDefault();
+                const btn = form.querySelector('button'); if (btn) btn.disabled = true;
+                fetch(form.action, { method: 'POST', headers: AJAX_HEADERS, body: formBody(form) })
+                    .then(r => r.json()).then(d => { if (d.success) { appendSong(d.song); if (btn) markAdded(btn); } else if (btn) btn.disabled = false; })
+                    .catch(() => { if (btn) btn.disabled = false; });
+            });
+        }
+        function appendSong(song) {
+            const div = document.createElement('div');
+            div.className = 'list-group-item queue-item border-0 rounded p-2 bg-transparent';
+            Object.assign(div.dataset, {
+                songId: song.id, videoId: song.videoId, source: song.source || 'youtube',
+                title: song.title, thumb: song.thumbnailUrl, rating: song.rating || 0
+            });
+            let stars = '';
+            for (let i = 1; i <= 10; i++) {
+                stars += '<form action="/playlists/' + PLAYLIST_ID + '/rate" method="POST" class="rate-form d-inline m-0">' +
+                    '<input type="hidden" name="songId" value="' + song.id + '"><input type="hidden" name="rating" value="' + i + '">' +
+                    '<button type="submit" class="rating-btn" data-star="' + i + '" aria-label="Rate ' + i + ' of 10"><i class="bi bi-star-fill rating-star-small"></i></button></form>';
             }
+            div.innerHTML =
+                '<div class="d-flex justify-content-between align-items-center">' +
+                  '<div class="d-flex align-items-center gap-3" style="min-width:0; flex:1;">' +
+                    '<span class="queue-index text-readable-secondary small fw-bold flex-shrink-0" style="width:20px;"></span>' +
+                    '<a href="#" class="play-link flex-shrink-0 d-block" aria-label="Play ' + esc(song.title) + '"><img src="' + esc(song.thumbnailUrl) + '" alt="Thumbnail for ' + esc(song.title) + '" width="45" height="45" class="rounded object-fit-cover"></a>' +
+                    '<div class="d-flex flex-column" style="min-width:0;">' +
+                      '<a href="#" class="play-link fw-bold small text-white text-truncate song-title text-decoration-none">' + esc(song.title) + '</a>' +
+                      '<div class="d-flex align-items-center mt-1 rating-row">' + stars + '</div>' +
+                    '</div>' +
+                  '</div>' +
+                  '<form action="/playlists/' + PLAYLIST_ID + '/remove" method="POST" class="remove-form ms-2"><input type="hidden" name="songId" value="' + song.id + '"><button class="btn btn-link text-readable-secondary hover-danger p-0" style="font-size:1rem;" aria-label="Remove from queue"><i class="bi bi-x-lg"></i></button></form>' +
+                '</div>';
+            queueEl.appendChild(div);
+            originalOrder.push(div);
+            renumber(); updateTransport(); applyFilter();
+        }
+
+        /* ---------------- FILTER ---------------- */
+        const filterInput = document.getElementById('playlistFilter');
+        function applyFilter() {
+            if (!filterInput) return;
+            const f = filterInput.value.toLowerCase();
+            queueEl.querySelectorAll('.queue-item').forEach(item => {
+                item.style.display = (item.dataset.title || '').toLowerCase().includes(f) ? '' : 'none';
+            });
+        }
+        if (filterInput) filterInput.addEventListener('keyup', applyFilter);
+
+        /* ---------------- SORT (client-side, no reload) ---------------- */
+        const sortSelect = document.getElementById('sortSelect');
+        let originalOrder = queueEl ? Array.from(queueEl.querySelectorAll('.queue-item')) : [];
+        if (sortSelect) sortSelect.addEventListener('change', function () {
+            const items = Array.from(queueEl.querySelectorAll('.queue-item'));
+            let sorted;
+            if (this.value === 'name_asc') sorted = items.slice().sort((a, b) => (a.dataset.title || '').localeCompare(b.dataset.title || ''));
+            else if (this.value === 'rating_desc') sorted = items.slice().sort((a, b) => (parseInt(b.dataset.rating, 10) || 0) - (parseInt(a.dataset.rating, 10) || 0));
+            else sorted = originalOrder.filter(el => el.isConnected);
+            sorted.forEach(el => queueEl.appendChild(el));
+            renumber(); updateTransport();
         });
 
+        /* ---------------- SIDEBAR DRAG & DROP (playlists) ---------------- */
+        const container = document.getElementById('playlist-list');
+        if (container) {
+            container.querySelectorAll('.playlist-item').forEach(d => {
+                d.addEventListener('dragstart', () => { d.classList.add('dragging'); container.classList.add('dragging-active'); });
+                d.addEventListener('dragend', () => { d.classList.remove('dragging'); container.classList.remove('dragging-active'); saveNewOrder(); });
+            });
+            container.addEventListener('dragover', e => {
+                e.preventDefault();
+                const after = getDragAfterElement(container, e.clientY);
+                const dragging = document.querySelector('.dragging');
+                if (after == null) container.appendChild(dragging); else container.insertBefore(dragging, after);
+            });
+        }
         function getDragAfterElement(container, y) {
-            const draggableElements = [...container.querySelectorAll('.playlist-item:not(.dragging)')];
-            return draggableElements.reduce((closest, child) => {
+            const els = [...container.querySelectorAll('.playlist-item:not(.dragging)')];
+            return els.reduce((closest, child) => {
                 const box = child.getBoundingClientRect();
                 const offset = y - box.top - box.height / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
+                return (offset < 0 && offset > closest.offset) ? { offset, element: child } : closest;
+            }, { offset: -Infinity }).element;
+        }
+        function saveNewOrder() {
+            const ids = Array.from(container.querySelectorAll('.playlist-item')).map(i => i.getAttribute('data-id'));
+            fetch('/playlists/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: ids }) }).catch(() => {});
         }
 
-        function saveNewOrder() {
-            const items = container.querySelectorAll('.playlist-item');
-            const orderedIds = Array.from(items).map(item => item.getAttribute('data-id'));
-            
-            fetch('/playlists/reorder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order: orderedIds })
-            }).then(res => res.json()).then(data => {
-                console.log('Order saved:', data);
-            }).catch(err => console.error('Error saving order:', err));
-        }
+        // Fallback hook for the server-rendered <audio onended>
+        window.__playNext = playNext;
+        updateTransport();
+    })();
     </script>
 </body>
 </html>

@@ -5,7 +5,8 @@ services:
     region: oregon
     plan: free                
     
-    buildCommand: npm install
+    # Dependencies live in the Server/ subfolder, so install there.
+    buildCommand: npm install --prefix Server
     startCommand: node Server/server.js
 
     # Health Check
@@ -15,9 +16,12 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20.0.0
-      
+
+      - key: NODE_ENV
+        value: production
+
       - key: SESSION_SECRET
-        generateValue: true    
-      
+        generateValue: true
+
       - key: YOUTUBE_API_KEY
-        sync: false            
+        sync: false

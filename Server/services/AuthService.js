@@ -1,3 +1,4 @@
+// author: claude
 // server/services/AuthService.js
 const UserRepository = require('../repositories/UserRepository');
 const User = require('../models/User');
@@ -7,8 +8,19 @@ class AuthService {
     
 
     async register(dto) {
+        // Basic input validation
+        const email = (dto.email || '').trim();
+        const firstName = (dto.firstName || '').trim();
+        if (!email) throw new Error("Email is required");
+        if (!firstName) throw new Error("First name is required");
+        if (!dto.password || dto.password.length < 6) {
+            throw new Error("Password must be at least 6 characters");
+        }
+        dto.email = email;
+        dto.firstName = firstName;
+
         // Check if user exists
-        const existing = await UserRepository.findByEmail(dto.email);
+        const existing = await UserRepository.findByEmail(email);
         if (existing) {
             throw new Error("User already exists");
         }

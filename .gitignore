@@ -1,34 +1,50 @@
+# ============================================================
+#  Music Hub - .gitignore
+#  Keeps the repo to project source code + README only.
+# ============================================================
+
 # --- Dependencies ---
 node_modules/
-package-lock.json  # Optional: Keep this if you want to lock versions, ignore if you don't.
 
-# --- Environment Variables & Secrets ---
+# --- Secrets & environment (NEVER expose API keys / secrets) ---
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+*.env
 
-# --- Database ---
+# --- Databases (runtime data) ---
 *.sqlite
 *.sqlite3
 *.db
-server/database/music_app.sqlite
 
-# --- User Uploads (MP3s) ---
-# We ignore the files inside uploads so we don't commit 100MBs of music
+# --- User uploads (MP3s) ---
 client/uploads/*
-# But we keep the folder itself (add a .gitkeep file inside uploads if you want to track the empty folder)
 !client/uploads/.gitkeep
 
-# --- Legacy/Temporary Files ---
-users.json
+# --- Documentation & diagrams (keep only README.md) ---
+*.md
+!README.md
+docs/
+*.drawio
+*.model.xml
+
+# --- Large media / recordings ---
+*.zip
+*.mov
+*.mp4
+
+# --- Logs ---
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# --- OS & Editor System Files ---
+# --- Editor / tooling ---
+.claude/
+.vscode/
+.idea/
+*.swp
+
+# --- OS files ---
 .DS_Store
 .DS_Store?
 ._*
@@ -36,9 +52,4 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
-.vscode/
-.idea/
-*.swp
 
-
-*.txt

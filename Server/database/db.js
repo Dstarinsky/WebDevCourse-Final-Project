@@ -1,3 +1,4 @@
+// author: claude
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
@@ -5,12 +6,18 @@ const fs = require('fs');
 const uploadDir = path.join(__dirname, '../../client/uploads');
 if (!fs.existsSync(uploadDir)){ fs.mkdirSync(uploadDir, { recursive: true }); }
 
-const dbPath = path.resolve(__dirname, 'music_app.sqlite');
+// DB_PATH lets tests point at a throwaway database instead of the dev one.
+const dbPath = process.env.DB_PATH
+    ? path.resolve(process.env.DB_PATH)
+    : path.resolve(__dirname, 'music_app.sqlite');
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) console.error(err.message);
     else {
-        console.log('Connected to SQLite database.');
-        
+        if (process.env.NODE_ENV !== 'test') console.log('Connected to SQLite database.');
+
+        // Enforce foreign keys so ON DELETE CASCADE removes a playlist's songs
+        db.run(`PRAGMA foreign_keys = ON`);
+
         // Users Table
         db.run(`CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

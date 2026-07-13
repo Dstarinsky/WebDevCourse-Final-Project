@@ -1,5 +1,5 @@
+// author: claude
 const db = require('../database/db');
-const Playlist = require('../models/Playlist');
 
 class PlaylistRepository {
     
@@ -75,9 +75,14 @@ class PlaylistRepository {
             });
         });
     }
-    removeSong(songId) {
+    // playlistId scopes the delete so a song can only be removed from its own playlist
+    removeSong(songId, playlistId) {
         return new Promise((resolve, reject) => {
-            db.run(`DELETE FROM playlist_songs WHERE id = ?`, [songId], (err) => { if(err) reject(err); else resolve(true); });
+            const sql = playlistId
+                ? `DELETE FROM playlist_songs WHERE id = ? AND playlistId = ?`
+                : `DELETE FROM playlist_songs WHERE id = ?`;
+            const params = playlistId ? [songId, playlistId] : [songId];
+            db.run(sql, params, (err) => { if(err) reject(err); else resolve(true); });
         });
     }
     getSongsByPlaylistId(playlistId) {
@@ -86,9 +91,14 @@ class PlaylistRepository {
             db.all(sql, [playlistId], (err, rows) => { if (err) return reject(err); resolve(rows); });
         });
     }
-    updateSongRating(songId, rating) {
+    updateSongRating(songId, rating, playlistId) {
         return new Promise((resolve, reject) => {
-            db.run(`UPDATE playlist_songs SET rating = ? WHERE id = ?`, [rating, songId], (err) => { if(err) reject(err); else resolve(true); });
+            const safeRating = Math.max(0, Math.min(10, parseInt(rating, 10) || 0));
+            const sql = playlistId
+                ? `UPDATE playlist_songs SET rating = ? WHERE id = ? AND playlistId = ?`
+                : `UPDATE playlist_songs SET rating = ? WHERE id = ?`;
+            const params = playlistId ? [safeRating, songId, playlistId] : [safeRating, songId];
+            db.run(sql, params, (err) => { if(err) reject(err); else resolve(true); });
         });
     }
     renamePlaylist(id, newName) {

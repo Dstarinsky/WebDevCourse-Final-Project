@@ -1,6 +1,7 @@
+// author: claude
 const FavoriteRepository = require('../repositories/FavoriteRepository');
 const PlaylistRepository = require('../repositories/PlaylistRepository');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 class FavoriteController {
 
