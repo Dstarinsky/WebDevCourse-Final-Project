@@ -1,38 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= playlist.name %></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/css/style.css" rel="stylesheet">
+    <%- include('../partials/head', { title: playlist.name }) %>
 </head>
 <body class="app-shell">
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm sticky-top">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="/"><i class="bi bi-music-note-beamed"></i> MyMusicApp</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto align-items-center gap-3">
-                    <li class="nav-item"><a href="/" class="nav-link text-white">Home</a></li>
-                    <li class="nav-item"><a href="/favorites" class="nav-link text-white">Search Music</a></li>
-                    <li class="nav-item"><a href="/playlists" class="nav-link text-white active">My Playlists</a></li>
-                    <li class="nav-item border-start ps-3 border-secondary d-flex align-items-center gap-2">
-                        <span class="text-white fw-bold"><%= user.firstName %></span>
-                        <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <%- include('../partials/navbar', { user, active: 'playlists' }) %>
 
     <div class="row g-0">
         <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column d-none d-md-flex app-pane">
@@ -143,7 +116,7 @@
                             <% searchResults.forEach(vid => { %>
                                 <div class="list-group-item glass-card--flat d-flex justify-content-between align-items-center py-2 px-3 shadow-sm" style="margin-bottom: 8px;">
                                     <div class="d-flex align-items-center gap-3 text-truncate">
-                                        <img src="<%= vid.thumbnail %>" alt="Thumbnail for <%= vid.title %>" width="40" style="border-radius: 6px;">
+                                        <img src="<%= vid.thumbnail %>" alt="Thumbnail for <%= vid.title %>" width="40" class="thumb-sm">
                                         <span class="small fw-bold text-white text-truncate"><%= vid.title %></span>
                                     </div>
                                     <form action="/playlists/<%= playlist.id %>/add" method="POST" class="yt-add-form">
@@ -183,7 +156,7 @@
                             </div>
                         </div>
 
-                        <div class="card-body p-2 overflow-auto custom-scrollbar" style="max-height: 600px;">
+                        <div class="card-body p-2 overflow-auto custom-scrollbar queue-scroll">
                             <div class="list-group list-group-flush gap-1" id="playlistQueue">
                                 <% songs.forEach((song, index) => { %>
                                     <% const playUrl = `/playlists/${playlist.id}?play=${song.videoId}&sort=${sortBy}&filter=${filterQuery}`; %>
@@ -195,7 +168,7 @@
                                                 <span class="queue-index text-readable-secondary small fw-bold flex-shrink-0" style="width: 20px;"><%= index + 1 %></span>
                                                 <a href="<%= playUrl %>" class="play-link flex-shrink-0 d-block" aria-label="Play <%= song.title %>">
                                                     <% if (song.source === 'local') { %>
-                                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white" style="width: 45px; height: 45px;"><i class="bi bi-mic-fill"></i></div>
+                                                        <div class="bg-secondary rounded d-flex align-items-center justify-content-center text-white thumb-md"><i class="bi bi-mic-fill"></i></div>
                                                     <% } else { %>
                                                         <img src="<%= song.thumbnailUrl %>" alt="Thumbnail for <%= song.title %>" width="45" height="45" class="rounded object-fit-cover">
                                                     <% } %>
@@ -204,11 +177,11 @@
                                                     <a href="<%= playUrl %>" class="play-link fw-bold small text-white text-truncate song-title text-decoration-none"><%= song.title %></a>
                                                     <%# Rating row — sibling of the play links, NOT nested inside an <a> %>
                                                     <div class="d-flex align-items-center mt-1 rating-row">
-                                                        <% for(let i=1; i<=10; i++) { %>
+                                                        <% for(let i=1; i<=maxRating; i++) { %>
                                                             <form action="/playlists/<%= playlist.id %>/rate" method="POST" class="rate-form d-inline m-0">
                                                                 <input type="hidden" name="songId" value="<%= song.id %>">
                                                                 <input type="hidden" name="rating" value="<%= i %>">
-                                                                <button type="submit" class="rating-btn" data-star="<%= i %>" aria-label="Rate <%= i %> of 10"><i class="bi bi-star-fill rating-star-small <%= song.rating >= i ? 'checked' : '' %>"></i></button>
+                                                                <button type="submit" class="rating-btn" data-star="<%= i %>" aria-label="Rate <%= i %> of <%= maxRating %>"><i class="bi bi-star-fill rating-star-small <%= song.rating >= i ? 'checked' : '' %>"></i></button>
                                                             </form>
                                                         <% } %>
                                                     </div>
@@ -275,6 +248,7 @@
     <script>
     (function () {
         const PLAYLIST_ID = <%= playlist.id %>;
+        const MAX_RATING = <%= maxRating %>;
         const AJAX_HEADERS = { 'X-Requested-With': 'fetch' };
         const queueEl     = document.getElementById('playlistQueue');
         const playerArea  = document.getElementById('playerArea');
@@ -416,7 +390,7 @@
             resultsEl.innerHTML = results.map(v =>
                 '<div class="list-group-item glass-card--flat d-flex justify-content-between align-items-center py-2 px-3 shadow-sm" style="margin-bottom:8px;">' +
                   '<div class="d-flex align-items-center gap-3 text-truncate">' +
-                    '<img src="' + esc(v.thumbnail) + '" alt="Thumbnail for ' + esc(v.title) + '" width="40" style="border-radius:6px;">' +
+                    '<img src="' + esc(v.thumbnail) + '" alt="Thumbnail for ' + esc(v.title) + '" width="40" class="thumb-sm">' +
                     '<span class="small fw-bold text-white text-truncate">' + esc(v.title) + '</span>' +
                   '</div>' +
                   '<button class="btn btn-sm fw-bold small border border-success text-success rounded-pill px-3 py-1 hover-bg-success flex-shrink-0 add-result-btn" ' +
@@ -459,10 +433,10 @@
                 title: song.title, thumb: song.thumbnailUrl, rating: song.rating || 0
             });
             let stars = '';
-            for (let i = 1; i <= 10; i++) {
+            for (let i = 1; i <= MAX_RATING; i++) {
                 stars += '<form action="/playlists/' + PLAYLIST_ID + '/rate" method="POST" class="rate-form d-inline m-0">' +
                     '<input type="hidden" name="songId" value="' + song.id + '"><input type="hidden" name="rating" value="' + i + '">' +
-                    '<button type="submit" class="rating-btn" data-star="' + i + '" aria-label="Rate ' + i + ' of 10"><i class="bi bi-star-fill rating-star-small"></i></button></form>';
+                    '<button type="submit" class="rating-btn" data-star="' + i + '" aria-label="Rate ' + i + ' of ' + MAX_RATING + '"><i class="bi bi-star-fill rating-star-small"></i></button></form>';
             }
             div.innerHTML =
                 '<div class="d-flex justify-content-between align-items-center">' +

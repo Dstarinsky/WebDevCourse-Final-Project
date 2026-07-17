@@ -1,5 +1,6 @@
-// author: claude
 const PlaylistRepository = require('../repositories/PlaylistRepository');
+const YouTubeService = require('../services/YouTubeService');
+const { RATING_MIN, RATING_MAX } = require('../constants');
 require('dotenv').config({ quiet: true });
 
 class PlaylistController {
@@ -54,7 +55,7 @@ class PlaylistController {
             // Search Logic
             let searchResults = [];
             if (req.query.search) {
-                searchResults = await searchYouTube(req.query.search, 5);
+                searchResults = await YouTubeService.search(req.query.search, 5);
             }
 
             const activeVideoId = req.query.play || (songs.length > 0 ? songs[0].videoId : null);
@@ -63,7 +64,8 @@ class PlaylistController {
             res.render('playlists/view', {
                 user: req.session.user, playlist, songs, playlists: allPlaylists,
                 searchResults, currentSong, activeVideoId: currentSong ? currentSong.videoId : null,
-                searchQuery: req.query.search || '', filterQuery: filterQuery, sortBy: sortBy
+                searchQuery: req.query.search || '', filterQuery: filterQuery, sortBy: sortBy,
+                maxRating: RATING_MAX
             });
         } catch (err) { console.error(err); res.redirect('/playlists'); }
     }
@@ -106,7 +108,7 @@ class PlaylistController {
     // JSON search endpoint used by the in-page (AJAX) YouTube search.
     async apiSearch(req, res) {
         try {
-            const results = await searchYouTube(req.query.q || req.query.search || '', 6);
+            const results = await YouTubeService.search(req.query.q || req.query.search || '', 6);
             res.json({ results });
         } catch (err) { console.error(err); res.status(500).json({ results: [] }); }
     }
@@ -177,7 +179,7 @@ class PlaylistController {
     async rateSong(req, res) {
         try {
             const playlist = await this.getOwnedPlaylist(req.params.id, req.session.userId);
-            const rating = Math.max(0, Math.min(10, parseInt(req.body.rating, 10) || 0));
+            const rating = Math.max(RATING_MIN, Math.min(RATING_MAX, parseInt(req.body.rating, 10) || 0));
             if (playlist) await PlaylistRepository.updateSongRating(req.body.songId, rating, req.params.id);
             if (wantsJson(req)) return res.json({ success: !!playlist, rating });
             res.redirect(`/playlists/${req.params.id}`);
@@ -192,21 +194,6 @@ class PlaylistController {
 // True when the request came from our fetch() calls and expects JSON back.
 function wantsJson(req) {
     return req.get('X-Requested-With') === 'fetch';
-}
-
-// Shared YouTube music search helper.
-async function searchYouTube(query, maxResults = 5) {
-    const apiKey = process.env.YOUTUBE_API_KEY;
-    if (!apiKey) return [];
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=${maxResults}&q=${encodeURIComponent(query)}&key=${apiKey}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    if (!data.items) return [];
-    return data.items.map(item => ({
-        videoId: item.id.videoId,
-        title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium.url
-    }));
 }
 
 module.exports = new PlaylistController();

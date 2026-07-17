@@ -1,4 +1,3 @@
-// author: claude
 // server/services/AuthService.js
 const UserRepository = require('../repositories/UserRepository');
 const User = require('../models/User');
