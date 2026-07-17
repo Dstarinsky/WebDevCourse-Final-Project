@@ -1,4 +1,3 @@
-<!-- author: claude -->
 # Music Hub
 
 A full-stack web application that turns YouTube into a personal music library.

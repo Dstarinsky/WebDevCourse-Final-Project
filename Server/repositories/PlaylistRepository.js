@@ -1,18 +1,26 @@
-// author: claude
 const db = require('../database/db');
+const { RATING_MIN, RATING_MAX } = require('../constants');
 
 class PlaylistRepository {
-    
-    // Create with position
-    createPlaylist(userId, name) {
+
+    // Next position for a new row in `table`, scoped by `column` = `value`
+    // (e.g. the next slot at the end of a user's playlists, or a playlist's songs).
+    getNextPosition(table, column, value) {
         return new Promise((resolve, reject) => {
-            // Get max position first
-            db.get(`SELECT MAX(position) as maxPos FROM playlists WHERE userId = ?`, [userId], (err, row) => {
-                const newPos = (row && row.maxPos !== null) ? row.maxPos + 1 : 0;
-                const sql = `INSERT INTO playlists (userId, name, createdAt, position) VALUES (?, ?, ?, ?)`;
-                db.run(sql, [userId, name, new Date().toISOString(), newPos], function(err) {
-                    if (err) return reject(err); resolve(this.lastID);
-                });
+            db.get(`SELECT MAX(position) as maxPos FROM ${table} WHERE ${column} = ?`, [value], (err, row) => {
+                if (err) return reject(err);
+                resolve(row && row.maxPos !== null ? row.maxPos + 1 : 0);
+            });
+        });
+    }
+
+    // Create with position
+    async createPlaylist(userId, name) {
+        const newPos = await this.getNextPosition('playlists', 'userId', userId);
+        return new Promise((resolve, reject) => {
+            const sql = `INSERT INTO playlists (userId, name, createdAt, position) VALUES (?, ?, ?, ?)`;
+            db.run(sql, [userId, name, new Date().toISOString(), newPos], function(err) {
+                if (err) return reject(err); resolve(this.lastID);
             });
         });
     }
@@ -66,13 +74,11 @@ class PlaylistRepository {
     }
 
     // --- SONGS ---
-    addSong(playlistId, videoId, title, thumbnailUrl, source='youtube') {
+    async addSong(playlistId, videoId, title, thumbnailUrl, source='youtube') {
+        const newPos = await this.getNextPosition('playlist_songs', 'playlistId', playlistId);
         return new Promise((resolve, reject) => {
-            db.get(`SELECT MAX(position) as maxPos FROM playlist_songs WHERE playlistId = ?`, [playlistId], (err, row) => {
-                const newPos = (row && row.maxPos !== null) ? row.maxPos + 1 : 0;
-                db.run(`INSERT INTO playlist_songs (playlistId, videoId, title, thumbnailUrl, position, source, rating) VALUES (?, ?, ?, ?, ?, ?, 0)`, 
-                    [playlistId, videoId, title, thumbnailUrl, newPos, source], function(err) { if(err) reject(err); else resolve(this.lastID); });
-            });
+            db.run(`INSERT INTO playlist_songs (playlistId, videoId, title, thumbnailUrl, position, source, rating) VALUES (?, ?, ?, ?, ?, ?, 0)`,
+                [playlistId, videoId, title, thumbnailUrl, newPos, source], function(err) { if(err) reject(err); else resolve(this.lastID); });
         });
     }
     // playlistId scopes the delete so a song can only be removed from its own playlist
@@ -93,7 +99,7 @@ class PlaylistRepository {
     }
     updateSongRating(songId, rating, playlistId) {
         return new Promise((resolve, reject) => {
-            const safeRating = Math.max(0, Math.min(10, parseInt(rating, 10) || 0));
+            const safeRating = Math.max(RATING_MIN, Math.min(RATING_MAX, parseInt(rating, 10) || 0));
             const sql = playlistId
                 ? `UPDATE playlist_songs SET rating = ? WHERE id = ? AND playlistId = ?`
                 : `UPDATE playlist_songs SET rating = ? WHERE id = ?`;

@@ -3,61 +3,46 @@ const AuthService = require('../services/AuthService');
 
 class AuthController {
 
-    
     showLogin(req, res) {
         res.render('login', { error: null });
     }
 
-   
     showRegister(req, res) {
         res.render('register', { error: null });
     }
 
-   
     async register(req, res) {
-        try {
-            // Data Transfer Object 
-            const dto = {
-                email: req.body.username, 
-                password: req.body.password,
-                firstName: req.body.firstName,
-                lastName: req.body.lastName || ''
-            };
-
-            const user = await AuthService.register(dto);
-
-            // Write to Session
-            req.session.userId = user.id;
-            req.session.user = user;
-
-            res.redirect('/');
-        } catch (err) {
-            res.render('register', { error: err.message });
-        }
+        const dto = {
+            email: req.body.username,
+            password: req.body.password,
+            firstName: req.body.firstName,
+            lastName: req.body.lastName || ''
+        };
+        await this.authenticate(req, res, AuthService.register(dto), 'register');
     }
 
-    
     async login(req, res) {
+        const dto = {
+            email: req.body.username,
+            password: req.body.password
+        };
+        await this.authenticate(req, res, AuthService.login(dto), 'login');
+    }
+
+    // Shared by register/login: writes the session on success and
+    // re-renders `view` with the error message on failure.
+    async authenticate(req, res, authPromise, view) {
         try {
-            const dto = {
-                email: req.body.username,
-                password: req.body.password
-            };
-
-            const user = await AuthService.login(dto);
-
-            // Write to Session
+            const user = await authPromise;
             req.session.userId = user.id;
             req.session.user = user;
-
             res.redirect('/');
         } catch (err) {
-            res.render('login', { error: err.message });
+            res.render(view, { error: err.message });
         }
     }
 
     logout(req, res) {
-        // Clears Session
         req.session.destroy(() => {
             res.redirect('/login');
         });

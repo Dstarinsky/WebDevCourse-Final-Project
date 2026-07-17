@@ -1,6 +1,6 @@
-// author: claude
 const FavoriteRepository = require('../repositories/FavoriteRepository');
 const PlaylistRepository = require('../repositories/PlaylistRepository');
+const YouTubeService = require('../services/YouTubeService');
 require('dotenv').config({ quiet: true });
 
 class FavoriteController {
@@ -18,23 +18,12 @@ class FavoriteController {
             let searchQuery = req.query.search || '';
 
             if (searchQuery) {
-                const apiKey = process.env.YOUTUBE_API_KEY;
-                const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(searchQuery)}&key=${apiKey}`;
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (data.items) {
-                    // Check which results are already favorites
-                    searchResults = await Promise.all(data.items.map(async item => {
-                        const isFav = await FavoriteRepository.checkIsFavorite(userId, item.id.videoId);
-                        return {
-                            videoId: item.id.videoId,
-                            title: item.snippet.title,
-                            thumbnail: item.snippet.thumbnails.medium.url,
-                            isFavorite: isFav
-                        };
-                    }));
-                }
+                const videos = await YouTubeService.search(searchQuery, 8);
+                // Check which results are already favorites
+                searchResults = await Promise.all(videos.map(async video => ({
+                    ...video,
+                    isFavorite: await FavoriteRepository.checkIsFavorite(userId, video.videoId)
+                })));
             }
 
             res.render('favorites', { 

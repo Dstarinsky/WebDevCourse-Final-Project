@@ -1,4 +1,3 @@
-// author: claude
 require('dotenv').config({ quiet: true });
 const express = require('express');
 const path = require('path');
@@ -18,6 +17,7 @@ const PlaylistController = require('./controllers/PlaylistController');
 const crypto = require('crypto');
 const fs = require('fs');
 const ALLOWED_AUDIO_EXT = new Set(['.mp3', '.m4a', '.ogg', '.oga', '.wav', '.flac', '.aac']);
+const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB cap
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../client/uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
@@ -32,7 +32,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB cap
+    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
     fileFilter: (req, file, cb) => {
         // Accept only audio uploads with an allowlisted extension. This blocks
         // .html/.ejs/.js (stored XSS / template-overwrite RCE) regardless of the
