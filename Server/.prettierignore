@@ -1,0 +1,5 @@
+node_modules/
+storage/
+backups/
+package-lock.json
+views/

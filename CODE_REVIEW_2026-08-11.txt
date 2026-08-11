@@ -1,0 +1,745 @@
+MUSIC HUB — SENIOR CODE REVIEW
+Reviewed: 2026-08-11
+Commit: 7c964aceaca496105fb4f2696ab434bd2ec32e6a
+Scope: all tracked application, view, configuration, dependency, and test files
+
+ARCHIVE NOTICE (updated 2026-08-11): This file is the immutable pre-implementation
+audit snapshot. All application-code and repository/deployment configuration findings
+are resolved; see CODE_REVIEW_IMPLEMENTATION_STATUS_2026-08-11.md for current evidence.
+The unchecked boxes and old metrics below describe the audited commit, not the present tree.
+
+This is a proposal only. No application source code was changed. The older ignored
+CODE-REVIEW.md was preserved; this report supersedes it because it includes additional
+security, dependency, deployment, correctness, DRY, and KISS findings.
+
+
+EXECUTIVE VERDICT
+=================
+
+The project has a sound course-project foundation:
+
+- SQL values are parameterized throughout.
+- Playlist ownership is checked on the main read and mutation paths.
+- Session cookies are httpOnly, SameSite=Lax, and secure in production.
+- Uploaded filenames are server-generated, so the previous path-traversal risk is closed.
+- Controllers, repositories, services, views, and tests have understandable boundaries.
+- All 15 integration tests pass.
+
+It is not production-ready yet. The largest risks are data loss on Render, known vulnerable
+dependencies, an upload path that writes attacker-controlled bytes before authorization,
+weak upload validation and storage controls, missing request-level hardening, and trusted
+client metadata entering inline JavaScript. The main maintainability problem is the view
+layer: Server/views/playlists/view.ejs is 515 lines and maintains the same UI fragments in
+both EJS and JavaScript.
+
+Recommended decision: fix P0 and P1 before another production deployment. Address P2 in the
+same hardening release. Treat P3/P4 as a focused cleanup after behavior is protected by tests.
+
+
+VALIDATION PERFORMED
+====================
+
+- npm test: 15 passed, 0 failed (Node 26.0.0 locally).
+- npm audit --omit=dev --json: 10 advisories in the production dependency tree:
+  1 critical, 6 high, 3 low.
+- Current tracked files contain no obvious committed API key or session secret.
+- Server/.env is ignored. However, Server/.env.example is also accidentally ignored.
+- Git worktree was clean before this report was added.
+
+Audit nuance: several high/critical advisories are in sqlite3's node-gyp installation chain,
+not code the running application explicitly invokes. They are still a build/supply-chain risk
+and make the current lockfile fail the project's own dependency-security gate.
+
+
+P0 — RELEASE BLOCKERS
+=====================
+
+[ ] P0.1 Prevent production data loss on Render.
+
+Evidence:
+- render.yaml:2-6 selects a free Render web service.
+- Server/database/db.js:9-11 defaults the application database to a local SQLite file.
+- Server/server.js:21,80-81 stores uploads and sessions on the local filesystem.
+- render.yaml does not attach a persistent disk or configure DB_PATH, SESSION_DIR, or
+  UPLOAD_DIR to a durable mount.
+
+Impact:
+Render web services use an ephemeral filesystem by default. A deploy or restart can erase
+accounts, password hashes, favorites, playlists, sessions, and uploaded audio. The README's
+claim that returning users find their library as they left it is therefore not reliable.
+
+Change:
+- Preferred production design: move application data to managed Postgres, sessions to a
+  durable session store, and uploads to object storage. Keep SQLite/local disk for development.
+- Smaller single-instance option: use a paid Render persistent disk and point DB_PATH,
+  SESSION_DIR, and UPLOAD_DIR beneath its mount. Document that a disk prevents horizontal
+  scaling and only one instance may use SQLite safely.
+- Add backup/restore documentation.
+- Replace the root health check with /healthz that executes SELECT 1 against the datastore.
+
+Primary reference: https://render.com/docs/disks
+
+[ ] P0.2 Remove known vulnerable packages from the production lockfile.
+
+Evidence:
+- Server/package.json:21 declares sqlite3 ^5.1.7.
+- Server/package-lock.json:2110 locks sqlite3 5.1.7.
+- Server/package-lock.json:2209 locks tar 6.2.1 in sqlite3's build chain.
+- npm audit reports 1 critical, 6 high, and 3 low advisories.
+
+Important reported paths include:
+- sqlite3 -> node-gyp -> tar; npm recommends sqlite3 6.0.1, a major upgrade.
+- body-parser 1.20.5 (transitive through Express).
+- vulnerable brace-expansion and ip-address versions.
+
+Change:
+- Upgrade sqlite3 to the fixed supported major, rebuild the lockfile, and run the complete test
+  suite on the same supported Node LTS used in production.
+- Apply compatible transitive fixes for body-parser, brace-expansion, and ip-address.
+- Do not blindly merge npm audit fix --force. Review the sqlite3 major-version changes.
+- Add npm audit --omit=dev (or an equivalent reviewed scanner) to CI with an explicit policy.
+- Use npm ci --prefix Server in render.yaml rather than npm install for reproducible builds.
+
+Representative critical advisory: https://github.com/advisories/GHSA-23hp-3jrh-7fpw
+
+
+P1 — HIGH-PRIORITY SECURITY AND DATA-BOUNDARY CHANGES
+=====================================================
+
+[ ] P1.1 Authorize uploads before accepting or writing the multipart body.
+
+Evidence:
+- Server/server.js:139 runs upload.single('mp3file') before PlaylistController.uploadSong.
+- Server/controllers/PlaylistController.js:159 checks ownership only after Multer has written
+  req.file.
+
+Impact:
+Any authenticated user can POST a file to another user's or a nonexistent playlist ID. Multer
+writes the file first; the controller then refuses the DB insert but never deletes the orphan.
+Combined with a 25 MB per-request limit, no rate limit, and no user quota, this is a practical
+authenticated disk-exhaustion path.
+
+Change:
+- Add a route-level loadOwnedPlaylist middleware before Multer. Store the authorized playlist
+  on req and make the controller use it.
+- If any post-write validation or DB insert fails, unlink the just-written file in a finally/
+  compensating-cleanup path.
+- Add per-user upload count/byte quotas and rate limiting.
+- Add Multer limits for fields, fieldSize, parts, and files, not only fileSize.
+- Add dedicated Multer error middleware that returns 413 for size/part limits and 415 for an
+  unsupported media type, cleans up any partial file, and never exposes a development stack.
+- Add an integration test proving an upload to another user's and a nonexistent playlist writes
+  zero files.
+
+[ ] P1.2 Validate actual file content, not client-controlled extension and Content-Type.
+
+Evidence:
+- Server/server.js:36-42 trusts file.originalname's extension and file.mimetype.
+- Both values come from the multipart request.
+- Server/tests/upload-security.test.js:67-71 calls "ID3 fake mp3 bytes" legitimate, so the test
+  currently proves only filename/MIME filtering, not valid audio.
+
+Impact:
+An attacker can upload arbitrary bytes named evil.mp3 with Content-Type audio/mpeg. The extension
+allowlist prevents an .html filename but does not establish that the bytes are audio.
+
+Change:
+- Inspect magic bytes with a maintained file-signature parser after upload (or use memory/temp
+  storage and promote only validated files).
+- Map detected formats to an allowlist; reject extension/signature mismatches.
+- Delete rejected temp files.
+- Serve uploads with X-Content-Type-Options: nosniff and the detected MIME type.
+- Add tests for HTML/script bytes disguised as .mp3 and extension/signature mismatches.
+
+[ ] P1.3 Stop serving all user uploads as unauthenticated static assets.
+
+Evidence:
+- Server/server.js:61 exposes the entire client directory with express.static.
+- Uploads are stored under client/uploads and played from /uploads/<filename>.
+
+Impact:
+Playlist ownership protects the page but not the audio URL. Anyone who obtains a filename from
+browser history, logs, referrers, screenshots, or sharing can download the supposedly private
+file without a session. Random filenames reduce guessing; they are not authorization.
+
+Change:
+- Store uploads outside the static web root.
+- Serve GET /media/:songId through requireAuth plus a repository query joining song -> playlist
+  -> user, then stream the file with the correct Content-Type and safe Content-Disposition.
+- For object storage, use short-lived signed URLs after the same ownership check.
+- Set an explicit cache policy appropriate for private media.
+
+[ ] P1.4 Eliminate executable inline-handler interpolation in favorites.ejs.
+
+Evidence:
+- Server/views/favorites.ejs:38,59,91,107 places videoId, title, and thumbnail URL inside inline
+  onclick JavaScript.
+- Server/controllers/FavoriteController.js:47 accepts all three values directly from req.body.
+- Escaping for HTML and escaping for a JavaScript string are different contexts. EJS HTML
+  escaping does not make arbitrary text safe for inline JavaScript; the hand-written quote
+  replacement also fails for combinations of backslashes and quotes.
+
+Impact:
+Crafted stored metadata can change the inline JavaScript program. Current ownership makes the
+most direct path self-XSS, but the pattern becomes cross-user exploitable if data is ever shared,
+imported, or planted through a same-site request. It also prevents a strong CSP.
+
+Change:
+- Remove all inline onclick/onended/onsubmit handlers.
+- Put values in normal data-* attributes using EJS's default HTML escaping.
+- Register one delegated event listener and read element.dataset.
+- Prefer DOM APIs/textContent over HTML string concatenation.
+- Validate YouTube IDs with the expected identifier format and allow only approved thumbnail
+  origins/protocols. Better: obtain canonical metadata server-side instead of trusting hidden
+  form fields.
+- Add a regression test with quotes, backslashes, angle brackets, and </script>-like text.
+
+[ ] P1.5 Fail closed when production secrets or configuration are missing.
+
+Evidence:
+- Server/server.js:83 falls back to the public string dev-only-insecure-secret-change-me.
+
+Impact:
+render.yaml generates SESSION_SECRET today, but any other production deployment missing that
+variable starts successfully with a known signing secret.
+
+Change:
+- Parse and validate environment configuration once at startup.
+- Throw before app.listen when NODE_ENV=production and SESSION_SECRET is absent/too short.
+- Support secret rotation using an array of current/previous secrets if deployment policy needs
+  rotation.
+- Keep a development-only default clearly gated to non-production environments.
+- Log configuration names/status, never secret values.
+
+[ ] P1.6 Upgrade the production runtime from end-of-life Node 20.
+
+Evidence:
+- render.yaml:20 pins NODE_VERSION=20.0.0.
+- Server/package.json:25 accepts every Node version >=18, including unsupported releases.
+- Node 20 reached end of life on 2026-03-24.
+
+Change:
+- Standardize development, CI, package.json, and Render on a supported LTS line (Node 24 LTS is
+  the sensible target on the review date; Node 22 LTS is also supported).
+- Prefer a maintained major/LTS pin plus lockfile and CI coverage; do not pin the original
+  20.0.0 release of an EOL line.
+- Add .node-version or .nvmrc and a CI matrix for the supported line(s).
+
+Primary reference: https://nodejs.org/en/about/previous-releases
+
+
+P2 — SECURITY HARDENING
+=======================
+
+[ ] P2.1 Add CSRF protection to every state-changing route.
+
+Affected routes:
+- POST /login, /register
+- favorites add/remove
+- all playlist create/delete/reorder/rename/add/upload/remove/rate actions
+- logout after converting it to POST
+
+SameSite=Lax is useful but is not a complete authorization mechanism for same-site sibling
+origins, future cookie changes, or login CSRF. Use a maintained synchronizer-token or signed
+double-submit implementation, include the token in EJS forms and fetch headers, and optionally
+validate Origin/Referer as an additional check. Test missing, invalid, and valid tokens.
+
+[ ] P2.2 Regenerate the session on authentication and store a safe user projection.
+
+Evidence:
+- Server/controllers/AuthController.js:36-39 writes authentication into the existing session.
+- req.session.user receives the full User object, including passwordHash.
+
+Change:
+- Call req.session.regenerate after successful credential verification, then save the new
+  authenticated session before redirecting. This closes session-fixation opportunities.
+- Store only { id, firstName, email } or, preferably, only userId and load a minimal current user
+  when needed. Never serialize passwordHash into sessions or expose it to template locals.
+- On logout, use POST, handle destroy errors, clear the exact cookie name/options, then redirect.
+- Give the session cookie a non-default application-specific name.
+- Add tests asserting the session ID changes and the stored/rendered user never contains a hash.
+
+[ ] P2.3 Add rate limits and resource quotas.
+
+At minimum, use separate policies for:
+- login/register: brute-force and account-creation control;
+- /api/search and server-rendered YouTube search: API-key quota protection;
+- uploads: disk/CPU/bandwidth protection;
+- write routes: basic abuse protection.
+
+Configure trust proxy deliberately before IP-based limiting. Rate limiting alone is not enough
+for uploads; enforce per-user stored-byte and file-count quotas.
+
+[ ] P2.4 Add centralized, schema-based input validation and size limits.
+
+Currently missing or incomplete:
+- AuthService validates presence but not types, email format/casing, maximum lengths, or maximum
+  password bytes.
+- Playlist names, upload titles, search/filter queries, video IDs, URLs, IDs, and reorder arrays
+  have no strict schema or maximum length.
+- parseInt accepts prefixes such as "5abc"; invalid ratings silently become zero.
+- addFromSearch and favorites trust hidden client fields as canonical metadata.
+
+Change:
+- Validate params/query/body at the route boundary with reusable schemas.
+- Normalize email with trim + lowercase and enforce database uniqueness case-insensitively.
+- Use input type=email in login/register views; align labels (the app supports email, not a
+  separate username).
+- Replace the current six-character password minimum. For this single-factor login, the current
+  NIST benchmark is at least 15 characters; permit at least 64 characters, check proposed values
+  against a common/compromised-password blocklist, and do not add arbitrary composition rules.
+  Ensure the chosen password hash verifies the entire accepted value: bcrypt has a 72-byte input
+  limit, which must not silently truncate a longer accepted Unicode password.
+- Set documented length/byte limits for names, titles, email, search text, video IDs, and arrays.
+- Require integer IDs and an integer rating within RATING_MIN..RATING_MAX; reject invalid input
+  with 400 rather than coercing it to zero.
+- Limit express.json/urlencoded bodies explicitly.
+- Return stable public error messages; never render raw database/library errors.
+
+Password-policy reference: https://pages.nist.gov/800-63-4/sp800-63b.html
+
+[ ] P2.5 Add security headers and a real Content Security Policy.
+
+Evidence:
+- Server/server.js installs no security-header middleware.
+- Templates depend on inline scripts/handlers/styles and several third-party origins.
+
+Change:
+- Add Helmet (or equivalent) for nosniff, frame protection/frame-ancestors, referrer policy,
+  HSTS in production, and other baseline headers.
+- First extract inline JavaScript; then define a CSP allowing only self plus the exact YouTube,
+  font, image, and CDN origins required. Use nonces/hashes for any unavoidable inline script.
+- Self-host Bootstrap/icons where practical. Otherwise pin reviewed versions and add SRI plus
+  crossorigin for supported CDN assets.
+- Add an automated header/CSP smoke test.
+
+[ ] P2.6 Use ownership-scoped repository operations, not check-then-mutate by global ID.
+
+Evidence:
+- PlaylistController first calls getOwnedPlaylist, then rename/delete methods update by id only.
+- PlaylistRepository.removeSong and updateSongRating have optional playlistId arguments that
+  permit unsafe unscoped writes if a future caller omits the argument.
+
+Change:
+- Query owned playlists with WHERE id=? AND userId=? in one repository method.
+- Rename/delete with WHERE id=? AND userId=? and check this.changes.
+- Remove the optional unscoped branches from removeSong/updateSongRating.
+- Resolve false/404 when no row changed instead of reporting success.
+
+
+P3 — CORRECTNESS AND RELIABILITY
+===============================
+
+[ ] P3.1 Fix FavoriteRepository.add's unresolved error path.
+
+Evidence:
+- Server/repositories/FavoriteRepository.js:6-17 creates an outer Promise and calls
+  checkIsFavorite(...).then(...) without .catch(reject).
+
+If the SELECT rejects, the outer Promise never settles and the HTTP request hangs. Make add async,
+await checkIsFavorite, and return only the INSERT Promise. Prefer the database uniqueness change
+in P3.2 so the pre-check can be removed entirely.
+
+[ ] P3.2 Enforce favorite uniqueness in SQLite, atomically.
+
+The current check-then-insert can race and create duplicates. Add UNIQUE(userId, videoId), migrate/
+deduplicate existing data, and use INSERT ... ON CONFLICT DO NOTHING. Remove the extra pre-check
+from add. For search results, fetch the user's favorite video IDs in one query instead of issuing
+one query per result.
+
+[ ] P3.3 Repair reorder transaction handling and validate the complete order.
+
+Evidence:
+- Server/repositories/PlaylistRepository.js:57-73 ignores errors from BEGIN, prepare, each
+  stmt.run, and finalize; only COMMIT's callback is checked.
+- PlaylistController.js:77 assumes req.body.order is an array.
+
+Change:
+- Validate an array of unique integer IDs and decide whether it must exactly match all of the
+  user's current playlists.
+- Await BEGIN, every update, and COMMIT; ROLLBACK on any failure.
+- Return success only if the expected row count changed.
+- Add malformed, duplicate, foreign-ID, partial-order, and forced-DB-error tests.
+
+[ ] P3.4 Make database startup and migrations explicit.
+
+Evidence:
+- Server/database/db.js builds schema in the connection callback but exports db immediately.
+- ALTER TABLE migrations run on every startup and swallow every error, not only duplicate-column
+  errors.
+- Schema columns mostly allow NULL and lack domain constraints/indexes.
+
+Change:
+- Export an initialization Promise and listen only after PRAGMA/schema/migrations succeed.
+- Use versioned, one-time migrations in transactions; fail on unexpected migration errors.
+- Add NOT NULL where the domain requires it, CHECK(rating BETWEEN 0 AND 10), and useful indexes:
+  playlists(userId, position), playlist_songs(playlistId, position), favorites(userId, id).
+- Add appropriate ON DELETE behavior for user-owned playlists/favorites if user deletion is or
+  will be supported.
+- Decide and document busy_timeout/WAL settings for SQLite concurrency.
+
+[ ] P3.5 Delete local files when their song or playlist is deleted.
+
+Evidence:
+- removeSong and deletePlaylist delete database rows only.
+
+Change:
+- Load affected local-song filenames inside the ownership boundary.
+- Commit the DB mutation and delete corresponding safe basenames; define retry/reconciliation
+  behavior if filesystem cleanup fails.
+- Add a periodic orphan reconciler or admin command for existing orphan files.
+- Never join an untrusted stored path without basename/containment validation.
+
+[ ] P3.6 Store and render the real audio MIME type.
+
+Evidence:
+- Server allows mp3, m4a, ogg, oga, wav, flac, and aac.
+- Server/views/playlists/view.ejs:66 and :293 always emit type="audio/mpeg".
+
+Impact:
+Non-MP3 files can be accepted successfully and then fail to play or be interpreted incorrectly.
+
+Change:
+- Persist the detected MIME type (and ideally byte size) with the song.
+- Stream/respond and render the source with that MIME type.
+- Test every allowed format or reduce the allowlist to formats the supported browsers can play.
+
+[ ] P3.7 Handle YouTube failures, timeouts, validation, and quota use explicitly.
+
+Evidence:
+- Server/services/YouTubeService.js:10-13 does not trim/reject empty queries, check response.ok,
+  cap maxResults, or set a timeout.
+- Controllers call it with hard-coded result counts 5, 6, and 8.
+
+Change:
+- Build requests with URL/URLSearchParams.
+- Reject empty/oversized queries before network access and clamp result count to a named policy.
+- Add AbortSignal timeout, response.ok handling, response-shape validation, and safe logging that
+  never logs the API key URL.
+- Distinguish "no results" from upstream failure in controller/UI responses.
+- Cache short-lived repeated searches to protect quota.
+- Mock fetch in unit tests for success, 4xx, 5xx, invalid JSON, and timeout.
+
+[ ] P3.8 Stop reporting successful song mutations when nothing changed.
+
+Evidence:
+- removeSong/updateSongRating always resolve true regardless of this.changes.
+- Controllers return success whenever the playlist exists, even for a nonexistent song ID.
+
+Return lastID/changes from the shared DB run helper. Use 404/false when the song is absent and
+403/404 consistently for ownership failures.
+
+[ ] P3.9 Use song row IDs for playback identity.
+
+Server/views/playlists/view.ejs and PlaylistController.show use videoId as the ?play identity.
+If the same YouTube video is added twice, songs.find selects the first copy, so a hard navigation
+cannot address the second queue row. Use ?song=<playlist_songs.id>, verify it belongs to the loaded
+playlist, and treat videoId only as media metadata.
+
+[ ] P3.10 Fix URL construction and script-data serialization.
+
+Evidence:
+- Server/views/playlists/view.ejs:47-55 and :162 concatenate filter/sort/video values into URLs.
+- nextSongUrl is placed in a <script> with EJS HTML escaping, which is the wrong serialization
+  context and can leave literal &amp; in the JavaScript string.
+
+Use URLSearchParams for query strings and JSON serialization for data passed to scripts. Better,
+move the script to a static file and read IDs/config from validated data attributes.
+
+[ ] P3.11 Fix double escaping of queue titles.
+
+Evidence:
+- Server/views/playlists/view.ejs:165 manually replaces quotes with &quot; inside <%= ... %>.
+
+EJS already escapes HTML attributes, so the ampersand is escaped again and dataset.title becomes
+literal &quot; text. Use data-title="<%= song.title %>" with no manual replacement. Test a title
+such as Say "Hello" in playback, filtering, and ARIA labels.
+
+[ ] P3.12 Remove the nonexistent local thumbnail path.
+
+Evidence:
+- PlaylistController.js:162 stores /images/mp3-icon.png.
+- No client/images directory or mp3-icon.png exists.
+
+Store null plus source=local and let the view render its existing icon fallback, or add a real
+asset. Null is simpler because local-song views already branch on source.
+
+[ ] P3.13 Return correct HTTP outcomes and centralize error handling.
+
+Current behavior often redirects on validation/database failures, returns 200 for invalid auth,
+or redirects every unknown route via the 404 fallback. Fetch clients also attempt JSON parsing
+without checking response.ok and silently swallow errors.
+
+Change:
+- Add a small async route wrapper and centralized error middleware.
+- Use 400 validation, 401 authentication, 403 authorization, 404 absence, 409 conflicts, and 500
+  unexpected errors. Render friendly messages without raw err.message.
+- Give /api routes JSON errors; do not redirect them to HTML.
+- Replace the catch-all redirect with an actual 404 page/JSON response.
+- Check response.ok in browser fetch code and show actionable feedback.
+
+[ ] P3.14 Make the legacy .html redirect preserve query strings or remove it.
+
+Server/server.js:68-74 uses req.path, so /favorites.html?search=x loses its query. If legacy URLs
+are still required, rebuild the location from path plus the original query and restrict behavior
+to GET/HEAD. Otherwise delete the middleware to keep routing simple.
+
+
+P4 — DRY CHANGES
+================
+
+[ ] P4.1 Extract the common page layout and script includes.
+
+All six page views repeat doctype/html/head/body/navbar/footer structure. The Bootstrap 5.3.0 JS
+URL appears in six templates and its version appears a seventh time in head.ejs for CSS.
+
+Create shared layout-head/layout-foot partials (or adopt an EJS layout helper) with explicit
+title, user, active navigation item, body class, and optional page scripts. This gives the CDN
+version and base shell one owner. Do not place CDN URLs in environment config; a partial is the
+simpler source of truth because those URLs do not vary per deployment.
+
+[ ] P4.2 Give queue/search markup one source of truth.
+
+Duplicated representations:
+- queue item: view.ejs:161-196 and appendSong at :428-452;
+- YouTube result: view.ejs:116-129 and renderResults at :388-399;
+- local player: view.ejs:61-68 and mountLocal at :287-297.
+
+Use reusable <template> elements populated with DOM APIs, or server-rendered EJS partials returned
+by mutation endpoints. Do not maintain the same component as both EJS markup and long JavaScript
+string concatenation. DOM APIs/textContent also remove the custom esc helper and reduce XSS risk.
+
+[ ] P4.3 Extract repeated playlist UI partials.
+
+- Desktop playlist list at view.ejs:20-27 and mobile list at :236-241.
+- Create-playlist modal in playlists/index.ejs and playlists/view.ejs.
+- Login/register error alert and auth-card shell.
+
+Extract only the stable repeated components. Do not turn every small element into a partial.
+
+[ ] P4.4 Choose one filtering/sorting implementation.
+
+PlaylistController.show filters/sorts server-side, while view.ejs:458-480 repeats the behavior
+client-side. Pick one behavior based on whether shareable/deep-linkable URLs matter:
+- server-side: forms/query params are canonical, simpler client script; or
+- client-side: remove server filter/sort and their query threading.
+
+Keeping both is drift-prone. If progressive enhancement is the reason, document and test that
+explicitly.
+
+[ ] P4.5 Centralize policy/config values without building a "god config".
+
+Create one validated server config module for values that vary by environment:
+- production/test mode, port;
+- required session secret and session DB directory/name;
+- application DB path;
+- upload directory;
+- YouTube API key;
+- optional validated bcrypt cost and external-call timeout.
+
+Keep domain policies as named constants with one owner and expose only safe public values to EJS:
+- password minimum/maximum;
+- session max age;
+- upload byte limit and allowed detected formats;
+- rating range;
+- search query/result limits.
+
+Reasonable fixed values such as the default local port, a YouTube endpoint constant, HTTP status
+codes, and layout dimensions are not automatically bad hard-coding. Extract values when they
+vary, express policy, or are duplicated—not every literal.
+
+[ ] P4.6 Remove duplicated or misleading configuration.
+
+- dotenv is loaded in server.js and again in both FavoriteController and PlaylistController.
+  Load it once at the executable entry point, before importing configuration.
+- Upload directory creation exists in server.js and database/db.js; db.js ignores UPLOAD_DIR and
+  should not know about files. Give upload setup one owner.
+- Password minimum 6 exists in AuthService.js and register.ejs. Render the view attribute from
+  the same public policy constant used on the server.
+- Rating clamping occurs in both PlaylistController and PlaylistRepository. Validate once at the
+  boundary and enforce the invariant again with a DB CHECK, not duplicate coercion logic.
+
+[ ] P4.7 Replace the favorites N+1 query and parallelize independent reads.
+
+FavoriteController.index loads favorites and playlists sequentially, then issues one
+checkIsFavorite query for each YouTube result. Load independent base data with Promise.all and
+retrieve all matching favorite IDs in one WHERE videoId IN (...) query (or one user favorite set).
+
+[ ] P4.8 Create a tiny SQLite adapter for repeated Promise wrappers.
+
+Repositories repeat callback-to-Promise boilerplate for get/all/run and sometimes lose errors or
+row-change metadata. A three-function adapter returning { lastID, changes } would remove
+duplication and directly prevent P3.1/P3.3/P3.8. Keep SQL in repositories; do not introduce an ORM
+for this project solely to remove a few callbacks.
+
+[ ] P4.9 Move page JavaScript out of the 515-line EJS template.
+
+Extract playlist behavior to a static client/js/playlist.js module and favorites behavior to its
+own module. Pass only validated data through data attributes or an application/json script block.
+Split by cohesive behavior only if the module remains too large. This improves caching, enables a
+strict CSP, makes functions testable, and leaves EJS responsible for markup rather than a second
+application language embedded in the template.
+
+
+P5 — KISS AND HOUSEKEEPING
+==========================
+
+[ ] P5.1 Decide whether models are real or remove them.
+
+Playlist.js, PlaylistSong.js, and Favorite.js are never imported. User.js is only a data holder,
+and returning it caused passwordHash to be stored in the session. For the simplest implementation,
+delete dead model classes and use explicit repository projections/POJOs. If the course rubric
+requires model classes, consistently construct and use them in every repository. The current
+half-model/half-row design is the least clear option.
+
+[ ] P5.2 Remove dead and no-op code.
+
+- UserRepository.findById is unused.
+- getUserPlaylists maps every row to an identical spread object; return rows or real models.
+- safeExt's .mp3 fallback is unreachable when fileFilter rejects non-allowlisted extensions;
+  validate once and keep filename generation simple.
+- /images/mp3-icon.png is dead/broken (P3.12).
+- Server/tmp/restart.txt is a tracked runtime trigger with no documented purpose; delete it.
+- info.txt duplicates links already in README; remove or merge its only useful content.
+
+[ ] P5.3 Remove optional unsafe flexibility.
+
+PlaylistRepository.removeSong/updateSongRating should always require playlistId (and ideally
+userId through an ownership-scoped query). Optional branches that perform global-ID mutations are
+not used and make a future security regression easy.
+
+[ ] P5.4 Move meaningful inline styles into the existing design system.
+
+favorites.ejs and playlists/view.ejs repeat widths, font sizes, borders, rgba colors, flex sizing,
+and z-index values in style attributes and JavaScript HTML strings. Add a small set of semantic
+classes/tokens in client/css/style.css. Reuse the existing border/surface/radius variables.
+
+Also merge .card-profile with the substantially identical .glass-card rules where composition is
+clear. Do not extract every one-off dimension; focus on repeated/policy values.
+
+[ ] P5.5 Fix repository documentation and ignored files.
+
+- .gitignore:11 ignores .env.*, which also ignores Server/.env.example even though README tells
+  users to copy it. Add an explicit !.env.example / !**/.env.example exception and commit the
+  sanitized example.
+- .gitignore ignores all Markdown except README, so code-review/design documents silently vanish
+  from Git status. Narrow the rule if project documentation should be versioned.
+- Update README's security claims: MIME/extension checks do not make the current upload pipeline
+  fully hardened, and Render persistence is not configured.
+- Align the product name: templates use MyMusicApp while README/render use Music Hub.
+- Update diagrams/writeups after deciding the model and service architecture.
+
+[ ] P5.6 Keep deployment declarations intentional.
+
+The Render region and service plan are expected declarative values, not application magic numbers.
+Do not move them into runtime config. Do align Node version declarations and use a reproducible
+build command. If staying on SQLite, document the one-instance constraint in render.yaml/README.
+
+
+TESTS TO ADD
+============
+
+The existing tests are readable and valuable, but they currently verify only public/auth pages,
+basic auth behavior, several playlist ownership cases, filename path traversal, extension
+filtering, and one accepted fake MP3. Add tests alongside—not after—the corresponding changes:
+
+Security:
+[ ] CSRF token required/accepted for form and fetch mutations.
+[ ] Session ID regenerates; session payload and rendered HTML contain no passwordHash.
+[ ] Login/register/search/upload rate-limit behavior.
+[ ] Another user's/nonexistent playlist upload writes no file.
+[ ] Disguised non-audio bytes are rejected and cleaned up.
+[ ] Media route requires ownership.
+[ ] Quotes/backslashes/markup in stored metadata cannot create executable markup.
+[ ] Required production config fails fast; baseline headers/CSP exist.
+
+Correctness:
+[ ] Favorite DB failure rejects instead of hanging.
+[ ] Concurrent duplicate favorites produce one row.
+[ ] Reorder rollback and invalid array cases.
+[ ] Delete song/playlist removes local files.
+[ ] Every allowed audio format receives the correct MIME type.
+[ ] Invalid IDs/ratings/types/lengths return 400.
+[ ] Duplicate video entries are individually addressable by song ID.
+[ ] YouTube 4xx/5xx/timeout/invalid JSON are distinguished from no results.
+[ ] Unknown web/API routes return 404 in the right representation.
+
+Quality gates:
+[ ] Run tests on the production Node LTS.
+[ ] Add lint/format scripts and a small CI workflow: npm ci, lint, test, audit/scanner.
+[ ] Add a migration test from the current schema to the new constrained schema.
+
+
+RECOMMENDED IMPLEMENTATION ORDER
+================================
+
+1. Durability and toolchain
+   - P0.1 production datastore/upload decision.
+   - P0.2 dependency upgrade and lockfile rebuild.
+   - P1.6 supported Node LTS and npm ci.
+
+2. Upload boundary
+   - P1.1 authorize before Multer.
+   - P1.2 content validation, quotas, cleanup.
+   - P1.3 authenticated media serving.
+   - P3.5/P3.6 file lifecycle and MIME correctness.
+
+3. Authentication/request hardening
+   - P1.5 fail-fast config.
+   - P2.1 CSRF, P2.2 session regeneration/minimization, P2.3 rate limits.
+   - P2.4 schemas and P2.5 headers/CSP.
+
+4. Small correctness fixes
+   - P3.1 favorite hang, P3.2 uniqueness, P3.3 reorder errors.
+   - P3.8 mutation row counts, P3.11 title escaping, P3.12 dead thumbnail.
+   - P3.7 YouTube error/timeout behavior.
+
+5. Data layer
+   - P2.6 ownership-scoped writes.
+   - P3.4 versioned migrations/constraints/indexes.
+   - P3.9 song identity.
+
+6. View DRY/KISS cleanup
+   - P1.4 remove inline handlers.
+   - P4.1/P4.3 layouts and partials.
+   - P4.2 shared component rendering.
+   - P4.4 choose one filter/sort path.
+   - P4.9 external client modules and strict CSP.
+
+7. Final cleanup and documentation
+   - P4.5-P4.8 focused deduplication.
+   - P5 dead code, inline styles, ignored files, docs.
+   - Full integration test, browser smoke test, dependency scan, and deployment restore test.
+
+
+WHAT SHOULD REMAIN
+==================
+
+- Keep parameterized SQL values.
+- Keep server-generated random upload filenames, but combine them with real content validation,
+  authorization, quotas, and private serving.
+- Keep one explicit ownership boundary for every user-owned resource; move it closer to SQL.
+- Keep the small, real-HTTP integration test style.
+- Keep the CSS token system; make views use it consistently.
+- Keep the current high-level layering unless the course rubric says otherwise. The application
+  does not need a larger framework or an ORM to become secure and maintainable.
+
+
+FINAL ACCEPTANCE CHECKLIST
+==========================
+
+Before calling the review resolved:
+
+[ ] Production data survives a redeploy/restart and has a tested backup path.
+[ ] npm audit/security policy passes with reviewed exceptions only.
+[ ] Production runs a supported Node LTS.
+[ ] Uploads are authorized before write, signature-validated, quota-limited, privately served,
+    correctly typed, and deleted with their DB records.
+[ ] All state mutations have CSRF defenses; auth/search/upload have rate controls.
+[ ] Sessions regenerate and never contain password hashes.
+[ ] Inputs have reusable schemas and database invariants back them up.
+[ ] No untrusted value is interpolated into executable inline JavaScript.
+[ ] Security headers and a tested CSP are enabled.
+[ ] DB migrations fail loudly and transactions roll back correctly.
+[ ] Duplicated UI markup/behavior has one owner.
+[ ] All tests, linting, and production dependency checks pass on the deployment runtime.

@@ -1,67 +1,88 @@
+const config = require('../config');
 const FavoriteRepository = require('../repositories/FavoriteRepository');
 const PlaylistRepository = require('../repositories/PlaylistRepository');
 const YouTubeService = require('../services/YouTubeService');
-require('dotenv').config({ quiet: true });
+const { YouTubeUnavailableError } = require('../services/YouTubeService');
+const validate = require('../validation');
 
 class FavoriteController {
-
     async index(req, res) {
-        try {
-            const userId = req.session.userId;
-            
-            // Get Data for View (Favorites + Playlists for the modal)
-            const favorites = await FavoriteRepository.getAll(userId);
-            const playlists = await PlaylistRepository.getUserPlaylists(userId);
+        const userId = req.session.userId;
+        const searchQuery = validate.searchQuery(req.query.search);
 
-            // Handle Search
-            let searchResults = [];
-            let searchQuery = req.query.search || '';
+        // Independent reads run concurrently instead of one after the other.
+        const [favorites, playlists] = await Promise.all([
+            FavoriteRepository.getAll(userId),
+            PlaylistRepository.getUserPlaylists(userId)
+        ]);
 
-            if (searchQuery) {
-                const videos = await YouTubeService.search(searchQuery, 8);
-                // Check which results are already favorites
-                searchResults = await Promise.all(videos.map(async video => ({
+        let searchResults = [];
+        let searchError = null;
+        if (searchQuery) {
+            try {
+                const videos = await YouTubeService.search(searchQuery, config.youtube.maxResults);
+                // One query for every result, replacing the previous per-result N+1.
+                const saved = await FavoriteRepository.findSavedVideoIds(
+                    userId,
+                    videos.map((v) => v.videoId)
+                );
+                searchResults = videos.map((video) => ({
                     ...video,
-                    isFavorite: await FavoriteRepository.checkIsFavorite(userId, video.videoId)
-                })));
+                    isFavorite: saved.has(video.videoId)
+                }));
+            } catch (err) {
+                if (!(err instanceof YouTubeUnavailableError)) throw err;
+                // Distinguish upstream failure from a genuinely empty result set.
+                searchError = err.message;
             }
-
-            res.render('favorites', { 
-                user: req.session.user, 
-                favorites, 
-                playlists, 
-                searchResults, 
-                searchQuery,
-                addedToPlaylistName: req.query.addedToPlaylistName,
-                addedToPlaylistId: req.query.addedToPlaylistId
-            });
-
-        } catch (err) {
-            console.error(err);
-            res.redirect('/');
         }
+
+        res.render('favorites', {
+            title: `Search Music — ${config.branding.appName}`,
+            user: req.session.user,
+            favorites,
+            playlists,
+            searchResults,
+            searchQuery,
+            searchError,
+            addedToPlaylistName: validate.optionalString(
+                req.query.addedToPlaylistName,
+                'Playlist name',
+                config.playlists.maxNameLength
+            ),
+            addedToPlaylistId: req.query.addedToPlaylistId
+                ? validate.positiveId(req.query.addedToPlaylistId, 'Playlist id')
+                : null
+        });
     }
 
     async add(req, res) {
-        try {
-            await FavoriteRepository.add(req.session.userId, req.body.videoId, req.body.title, req.body.thumbnailUrl);
-            // Redirect back keeping the search query if it exists
-            const redirectUrl = req.body.currentSearch ? `/favorites?search=${encodeURIComponent(req.body.currentSearch)}` : '/favorites';
-            res.redirect(redirectUrl);
-        } catch (err) {
-            console.error(err);
-            res.redirect('/favorites');
-        }
+        await FavoriteRepository.add(
+            req.session.userId,
+            validate.youtubeVideoId(req.body.videoId),
+            validate.requiredString(req.body.title, 'Title', config.youtube.maxTitleLength),
+            validate.thumbnailUrl(req.body.thumbnailUrl)
+        );
+        if (req.get('X-Requested-With') === 'fetch')
+            return res.json({ success: true, addedFavorite: true });
+        res.redirect(this.#backToSearch(req));
     }
 
     async remove(req, res) {
-        try {
-            await FavoriteRepository.remove(req.session.userId, req.body.videoId);
-            res.redirect('/favorites');
-        } catch (err) {
-            console.error(err);
-            res.redirect('/favorites');
-        }
+        await FavoriteRepository.remove(
+            req.session.userId,
+            validate.youtubeVideoId(req.body.videoId)
+        );
+        if (req.get('X-Requested-With') === 'fetch')
+            return res.json({ success: true, removedFavorite: true });
+        res.redirect(this.#backToSearch(req));
+    }
+
+    /** Preserve the current search when bouncing back to the favorites page. */
+    #backToSearch(req) {
+        const search = validate.searchQuery(req.body.currentSearch);
+        if (!search) return '/favorites';
+        return `/favorites?${new URLSearchParams({ search })}`;
     }
 }
 

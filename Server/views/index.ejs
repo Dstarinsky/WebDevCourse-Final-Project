@@ -1,61 +1,123 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<head>
-    <%- include('partials/head', { title: 'Home - MyMusicApp' }) %>
-</head>
-<body>
+<%- include('partials/layout-head', { title, user, active: 'home', bodyClass: 'app-shell' }) %>
 
-    <%- include('partials/navbar', { user, active: 'home' }) %>
+<main id="main-content" class="app-main">
 
-    <div class="hero-section text-center text-white d-flex flex-column justify-content-center align-items-center">
-        <h1 class="display-3 fw-bold mb-3">Welcome to your Music Hub</h1>
-        <p class="lead mb-5 text-secondary">Search for your favorite songs on YouTube and create your personal collection.</p>
-        
-        <div class="d-flex gap-3">
-            <% if (user) { %>
-                <a href="/favorites" class="btn btn-custom btn-lg shadow">
-                    <i class="bi bi-search me-2"></i> Search Songs
-                </a>
-                <a href="/playlists" class="btn btn-outline-custom btn-lg shadow">
-                    <i class="bi bi-music-note-list me-2"></i> Go to Playlists
-                </a>
-            <% } else { %>
-                <a href="/login" class="btn btn-custom btn-lg shadow px-5">
-                    <i class="bi bi-box-arrow-in-right me-2"></i> Login to Start
-                </a>
-                <a href="/register" class="btn btn-outline-light btn-lg shadow px-5">
-                    Create Account
-                </a>
-            <% } %>
+    <%# 12-column asymmetric composition — copy on the left, queue specimen offset
+        downward on the right. Not a centred gradient hero. %>
+    <section class="page-frame editorial-grid home-hero" aria-labelledby="home-title">
+
+        <%#
+            Decorative media field, scoped to the hero so it cannot drift over the
+            workflow section or footer. Public homepage only — functional pages carry
+            no ambient motion. Presentational, so it is hidden from assistive
+            technology and takes no pointer events. Objects are built from CSS
+            gradients and pseudo-elements; there are no image assets to load.
+        %>
+        <div class="media-field" aria-hidden="true">
+            <div class="media-object media-object--cd media-object--a"><span class="media-object__sheen"></span></div>
+            <div class="media-object media-object--cassette media-object--b"></div>
+            <div class="media-object media-object--cd media-object--c"><span class="media-object__sheen"></span></div>
+            <div class="media-object media-object--cassette media-object--d"></div>
+            <div class="media-object media-object--cd media-object--e"><span class="media-object__sheen"></span></div>
+            <div class="media-object media-object--cassette media-object--f"></div>
         </div>
-    </div>
 
-    <footer class="social-footer">
+        <div class="home-hero__copy">
+            <p class="hero-eyebrow">Personal listening room <span aria-hidden="true">/ 01</span></p>
 
-        <div class="container d-flex flex-column align-items-center gap-3">
+            <%# Two words per line: Syncopate is a wide display face and a longer line
+                overflows at 320px. The full promise lives in the lead below.
 
-            <p class="small text-secondary mb-0">Connect with me</p>
+                client/js/home.js splits each line into per-character spans so the
+                heading types itself. The full text stays in the DOM either way, so the
+                accessible name is correct and nothing reflows while it animates. %>
+            <h1 class="display-title js-typewriter" id="home-title">
+                <span class="display-title__line"><span>YouTube finds.</span></span>
+                <span class="display-title__line"><span>Your files.</span></span>
+                <span class="display-title__line"><span>One queue.</span></span>
+            </h1>
 
-            <div class="d-flex gap-3">
+            <p class="lead-copy hero-lead">
+                Keep what you discover, mix in your own audio, and shape the set
+                <span class="editorial-emphasis">without stopping the music.</span>
+            </p>
 
-                <a href="https://github.com/Dstarinsky" target="_blank" rel="noopener" class="social-link" aria-label="GitHub profile">
+            <div class="hero-actions">
+                <% if (user) { %>
+                    <a class="action-primary" href="/favorites">Find a track</a>
+                    <a class="action-secondary" href="/playlists">Return to my mixes</a>
+                <% } else { %>
+                    <a class="action-primary" href="/register">Build my first mix</a>
+                    <a class="action-secondary" href="/login">Open my library</a>
+                    <a class="action-link" href="#queue-specimen">See the queue in action</a>
+                <% } %>
+            </div>
+        </div>
 
-                    <i class="bi bi-github fs-4"></i>
+        <%# Honest illustration, explicitly labelled so it is never mistaken for a
+            live user queue. No fake waveform or invented metrics. %>
+        <figure class="queue-specimen home-hero__specimen" id="queue-specimen"
+                aria-labelledby="queue-specimen-title">
+            <figcaption class="queue-specimen__title" id="queue-specimen-title">Queue specimen</figcaption>
 
-                </a>
-
-                <a href="https://www.linkedin.com/in/david-starinsky/" target="_blank" rel="noopener" class="social-link" aria-label="LinkedIn profile">
-
-                    <i class="bi bi-linkedin fs-4"></i>
-
-                </a>
-
+            <div class="specimen-row specimen-row--playing">
+                <span class="specimen-row__index" aria-hidden="true">01</span>
+                <span class="specimen-row__title">A track you found on YouTube</span>
+                <span class="source-label source-label--youtube">YT</span>
             </div>
 
+            <div class="specimen-row">
+                <span class="specimen-row__index" aria-hidden="true">02</span>
+                <span class="specimen-row__title">A file from your own library</span>
+                <span class="source-label source-label--local">Local</span>
+            </div>
+
+            <p class="specimen-handoff">
+                <i class="bi bi-arrow-down" aria-hidden="true"></i>
+                One queue, no handoff gap
+            </p>
+        </figure>
+
+        <div class="home-hero__proof">
+            <ul class="proof-rule" aria-label="Working product evidence">
+                <li><span aria-hidden="true">01</span> YouTube + local audio</li>
+                <li><span aria-hidden="true">02</span> Private per-user library</li>
+                <li><span aria-hidden="true">03</span> Ownership paths integration-tested</li>
+            </ul>
         </div>
+    </section>
 
+    <section class="workflow-editorial" aria-labelledby="workflow-title">
+        <div class="page-frame editorial-grid">
+            <div class="home-hero__copy">
+                <h2 class="section-title" id="workflow-title">How one queue works</h2>
+
+                <ol class="workflow-steps">
+                    <li class="workflow-step">
+                        <p class="workflow-step__folio">01 Find</p>
+                        <h3 class="workflow-step__heading">Start with a track</h3>
+                        <p class="body-copy">Search YouTube from inside your listening room.</p>
+                    </li>
+                    <li class="workflow-step">
+                        <p class="workflow-step__folio">02 Keep</p>
+                        <h3 class="workflow-step__heading">Hold onto the good ones</h3>
+                        <p class="body-copy">Favorites stay close until you know which mix they belong in.</p>
+                    </li>
+                    <li class="workflow-step">
+                        <p class="workflow-step__folio">03 Mix</p>
+                        <h3 class="workflow-step__heading">Make one queue yours</h3>
+                        <p class="body-copy">Combine streamed tracks and local audio, then rate and reorder the set.</p>
+                    </li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <footer class="site-footer">
+        <div class="page-frame d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <p class="mb-0">Music Hub — a personal listening room.</p>
+        </div>
     </footer>
+</main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<%- include('partials/layout-foot', { user, active: 'home', pageScript: '/js/home.js' }) %>

@@ -1,0 +1,25 @@
+<%#
+    Closing half of the page shell.
+
+    `user` and `active` must be passed explicitly: EJS include locals are scoped to
+    the include that received them, so values handed to layout-head are not visible
+    here.
+
+    Locals: user, active, pageScript (optional), queueAvailable (optional)
+%>
+    <% if (user) { %>
+        <%- include('mobile-nav', {
+                active,
+                queueAvailable: typeof queueAvailable !== 'undefined' ? queueAvailable : false }) %>
+    <% } %>
+
+    <%# One polite live region per page for search, save, queue, and rating updates. %>
+    <div id="statusRegion" class="status-region" role="status" aria-live="polite" hidden></div>
+
+    <script src="<%= config.cdn.bootstrapJs %>"
+            integrity="<%= config.cdn.bootstrapJsIntegrity %>" crossorigin="anonymous"></script>
+    <% if (typeof pageScript !== 'undefined' && pageScript) { %>
+        <script src="<%= pageScript %>" defer></script>
+    <% } %>
+</body>
+</html>

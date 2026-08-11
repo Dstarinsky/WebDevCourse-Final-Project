@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: Server/package-lock.json
+      - run: npm ci
+        working-directory: Server
+      - run: npm run lint
+        working-directory: Server
+      - run: npm test
+        working-directory: Server
+      - run: npm run audit:prod
+        working-directory: Server

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="900" viewBox="0 0 1320 900" role="img" aria-labelledby="title desc">
+  <title id="title">Music Hub canonical SQLite schema, migration version 2</title>
+  <desc id="desc">Users own playlists and favorites. Playlists own playlist songs. Foreign keys cascade. Local song rows store detected MIME type and byte size.</desc>
+  <defs>
+    <style>
+      .title{font:700 24px system-ui,sans-serif;fill:#241733}.box{stroke-width:2}.head{font:700 17px system-ui,sans-serif;fill:#241733}.row{font:13px ui-monospace,monospace;fill:#241733}.note{font:13px system-ui,sans-serif;fill:#241733}.rel{fill:none;stroke-width:2}.card{filter:url(#shadow)}
+    </style>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#5c4b70" flood-opacity=".14"/></filter>
+  </defs>
+  <rect width="1320" height="900" fill="#fbf6fa"/>
+  <text id="schema-title" class="title" x="660" y="42" text-anchor="middle">Music Hub — canonical SQLite schema (user_version = 2)</text>
+
+  <g class="card">
+    <rect class="box" x="55" y="105" width="370" height="235" rx="8" fill="#fff0f5" stroke="#c6005c"/>
+    <text class="head" x="75" y="137">users</text><line x1="75" y1="150" x2="405" y2="150" stroke="#e0d2e6"/>
+    <text class="row" x="75" y="177"><tspan font-weight="700">PK</tspan><tspan dx="12">id INTEGER AUTOINCREMENT</tspan></text>
+    <text class="row" x="75" y="203"><tspan font-weight="700">U</tspan><tspan dx="20">email TEXT NOT NULL UNIQUE NOCASE</tspan></text>
+    <text class="row" x="75" y="229">firstName TEXT NOT NULL</text><text class="row" x="75" y="255">lastName TEXT NOT NULL DEFAULT ''</text>
+    <text class="row" x="75" y="281">passwordHash TEXT NOT NULL</text><text class="row" x="75" y="307">createdAt TEXT NOT NULL</text>
+  </g>
+  <g class="card">
+    <rect class="box" x="490" y="105" width="340" height="235" rx="8" fill="#effafa" stroke="#046e7d"/>
+    <text class="head" x="510" y="137">playlists</text><line x1="510" y1="150" x2="810" y2="150" stroke="#e0d2e6"/>
+    <text class="row" x="510" y="177"><tspan font-weight="700">PK</tspan><tspan dx="12">id INTEGER AUTOINCREMENT</tspan></text>
+    <text class="row" x="510" y="203"><tspan font-weight="700">FK</tspan><tspan dx="12">userId INTEGER NOT NULL</tspan></text>
+    <text class="row" x="530" y="226">→ users.id ON DELETE CASCADE</text><text class="row" x="510" y="255">name TEXT NOT NULL</text>
+    <text class="row" x="510" y="281">createdAt TEXT NOT NULL</text><text class="row" x="510" y="307">position INTEGER NOT NULL DEFAULT 0</text>
+  </g>
+  <g class="card">
+    <rect class="box" x="895" y="105" width="370" height="260" rx="8" fill="#fff4eb" stroke="#b4520a"/>
+    <text class="head" x="915" y="137">favorites</text><line x1="915" y1="150" x2="1245" y2="150" stroke="#e0d2e6"/>
+    <text class="row" x="915" y="177"><tspan font-weight="700">PK</tspan><tspan dx="12">id INTEGER AUTOINCREMENT</tspan></text>
+    <text class="row" x="915" y="203"><tspan font-weight="700">FK</tspan><tspan dx="12">userId INTEGER NOT NULL</tspan></text>
+    <text class="row" x="935" y="226">→ users.id ON DELETE CASCADE</text><text class="row" x="915" y="252">videoId TEXT NOT NULL</text>
+    <text class="row" x="915" y="278">title TEXT NOT NULL</text><text class="row" x="915" y="304">thumbnailUrl TEXT NULL</text>
+    <text class="row" x="915" y="330">createdAt TEXT NOT NULL</text><text class="row" x="915" y="352">UNIQUE(userId, videoId)</text>
+  </g>
+
+  <path class="rel" d="M425 220H490" stroke="#046e7d"/><circle cx="435" cy="220" r="4" fill="#046e7d"/><path d="m480 214 10 6-10 6" fill="none" stroke="#046e7d" stroke-width="2"/>
+  <text class="note" x="438" y="207">1 : 0..*</text>
+  <path class="rel" d="M425 255H455V75H855V235H895" stroke="#b4520a"/><circle cx="435" cy="255" r="4" fill="#b4520a"/><path d="m885 229 10 6-10 6" fill="none" stroke="#b4520a" stroke-width="2"/>
+  <text class="note" x="645" y="70">1 : 0..*</text>
+
+  <g class="card">
+    <rect class="box" x="400" y="455" width="520" height="330" rx="8" fill="#fff" stroke="#5c4b70"/>
+    <text class="head" x="420" y="487">playlist_songs</text><line x1="420" y1="500" x2="900" y2="500" stroke="#e0d2e6"/>
+    <text class="row" x="420" y="527"><tspan font-weight="700">PK</tspan><tspan dx="12">id INTEGER AUTOINCREMENT</tspan></text>
+    <text class="row" x="420" y="553"><tspan font-weight="700">FK</tspan><tspan dx="12">playlistId INTEGER NOT NULL → playlists.id CASCADE</tspan></text>
+    <text class="row" x="420" y="579">videoId TEXT NOT NULL</text><text class="row" x="420" y="605">title TEXT NOT NULL</text>
+    <text class="row" x="420" y="631">thumbnailUrl TEXT NULL</text><text class="row" x="420" y="657">position INTEGER NOT NULL DEFAULT 0</text>
+    <text class="row" x="420" y="683">source TEXT NOT NULL DEFAULT youtube CHECK youtube | local</text><text class="row" x="420" y="709">rating INTEGER NOT NULL DEFAULT 0 CHECK 0..10</text>
+    <text class="row" x="420" y="735">mimeType TEXT NULL</text><text class="row" x="420" y="761">sizeBytes INTEGER NULL</text>
+  </g>
+  <path class="rel" d="M660 340V455" stroke="#046e7d"/><circle cx="660" cy="350" r="4" fill="#046e7d"/><path d="m654 445 6 10 6-10" fill="none" stroke="#046e7d" stroke-width="2"/>
+  <text class="note" x="675" y="405">1 : 0..* · cascade</text>
+
+  <g><rect x="55" y="475" width="285" height="155" rx="8" fill="#f3eaf4" stroke="#5c4b70"/><text class="head" x="75" y="507">Indexes</text>
+    <text class="row" x="75" y="540">idx_playlists_user(userId, position)</text><text class="row" x="75" y="570">idx_songs_playlist(playlistId, position)</text><text class="row" x="75" y="600">idx_favorites_user(userId, id DESC)</text></g>
+  <g><rect x="975" y="475" width="290" height="205" rx="8" fill="#fff9fd" stroke="#c6005c"/><text class="head" x="995" y="507">Migration guarantees</text>
+    <text class="note" x="995" y="540"><tspan x="995" dy="0">v1 rebuilds legacy tables, enforces</tspan><tspan x="995" dy="22">constraints, and deduplicates favorites.</tspan><tspan x="995" dy="30">v2 purges orphaned legacy rows.</tspan><tspan x="995" dy="30">Startup enables foreign keys and runs</tspan><tspan x="995" dy="22">foreign_key_check transactionally.</tspan></text></g>
+</svg>

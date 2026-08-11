@@ -3,19 +3,28 @@ services:
     name: music-hub
     runtime: node
     region: oregon
-    plan: free                
-    
-    # Dependencies live in the Server/ subfolder, so install there.
-    buildCommand: npm install --prefix Server
+    plan: starter
+    numInstances: 1
+
+    # SQLite, sessions, uploads, and local backups must all remain under this
+    # mount. A persistent disk requires a paid service and deliberately fixes this
+    # SQLite deployment at one instance; do not enable horizontal scaling.
+    disk:
+      name: music-hub-data
+      mountPath: /var/data
+      sizeGB: 1
+
+    # `npm ci` installs exactly the locked tree; `npm install` can silently drift.
+    buildCommand: npm ci --prefix Server
     startCommand: node Server/server.js
 
-    # Health Check
-    healthCheckPath: /
+    # Verifies the datastore is reachable, not just that the process is up.
+    healthCheckPath: /healthz
 
-    # Environment Variables
     envVars:
+      # Node 20 reached end of life on 2026-03-24. Track a supported LTS line.
       - key: NODE_VERSION
-        value: 20.0.0
+        value: 24.18.0
 
       - key: NODE_ENV
         value: production
@@ -25,3 +34,15 @@ services:
 
       - key: YOUTUBE_API_KEY
         sync: false
+
+      - key: DB_PATH
+        value: /var/data/music_app.sqlite
+
+      - key: SESSION_DIR
+        value: /var/data
+
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+
+      - key: BACKUP_DIR
+        value: /var/data/backups

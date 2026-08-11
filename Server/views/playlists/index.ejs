@@ -1,55 +1,52 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<head>
-    <%- include('../partials/head', { title: 'My Library' }) %>
-</head>
-<body class="app-shell">
+<%- include('../partials/layout-head', { title, user, active: 'playlists', bodyClass: 'app-shell' }) %>
 
-    <%- include('../partials/navbar', { user, active: 'playlists' }) %>
+<main id="main-content" class="app-main page-frame">
 
-    <div class="row g-0">
-        
-        <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column app-pane d-none d-md-flex">
-            <div class="d-flex justify-content-between align-items-center mb-4 px-2">
-                <h6 class="label-caps text-readable-secondary mb-0">My Playlists</h6>
-                <button class="btn btn-square" data-bs-toggle="modal" data-bs-target="#createModal" aria-label="Create playlist">
-                    <i class="bi bi-plus fs-5"></i>
-                </button>
-            </div>
-
-            <div class="d-flex flex-column gap-2 overflow-auto" style="flex: 1;">
-                <p class="text-readable-secondary text-center mt-5 small">No playlists yet.</p>
+    <%# First-run state: a large serif folio and a real explanation, not a giant
+        icon in a circle. %>
+    <div class="empty-editorial">
+        <div class="empty-editorial__head">
+            <p class="folio-display mb-0" aria-hidden="true">01</p>
+            <div>
+                <h1 class="section-title">Name your first mix</h1>
+                <p class="body-copy mt-3">
+                    Start with a name. You can pull in YouTube finds or add your own audio next.
+                </p>
             </div>
         </div>
 
-        <div class="col-md-9 col-lg-10 p-5 d-flex flex-column align-items-center justify-content-center text-center app-pane">
-            <div class="bg-dark p-5 rounded-circle mb-4 shadow-lg border border-secondary border-opacity-25">
-                <i class="bi bi-music-player display-1 text-secondary opacity-50"></i>
-            </div>
-            <h2 class="fw-bold text-white mb-2">Create Your First Playlist</h2>
-            <p class="text-secondary mb-4">Organize your music by creating a new playlist.</p>
-            <button class="btn btn-custom px-4" data-bs-toggle="modal" data-bs-target="#createModal">Create New Playlist</button>
+        <div class="hero-actions">
+            <button type="button" class="action-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+                Create my first mix
+            </button>
         </div>
 
+        <%# Explanatory figure showing what a mix looks like — clearly a sample. %>
+        <figure class="m-0" aria-labelledby="sample-caption">
+            <figcaption class="meta-label text-muted-parchment mb-2" id="sample-caption">
+                What a mix looks like
+            </figcaption>
+            <ul class="sample-list">
+                <li>
+                    <span class="track-index" aria-hidden="true">01</span>
+                    <span>A track you found on YouTube</span>
+                    <span class="source-label source-label--youtube">YT</span>
+                </li>
+                <li>
+                    <span class="track-index" aria-hidden="true">02</span>
+                    <span>A file from your own library</span>
+                    <span class="source-label source-label--local">Local</span>
+                </li>
+                <li>
+                    <span class="track-index" aria-hidden="true">03</span>
+                    <span>Whatever you keep next</span>
+                    <span class="source-label source-label--youtube">YT</span>
+                </li>
+            </ul>
+        </figure>
     </div>
+</main>
 
-    <div class="modal fade" id="createModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <form action="/playlists/create" method="POST" class="modal-content">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold">New Playlist</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="text" name="name" class="form-control" placeholder="Playlist Name" required>
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="submit" class="btn btn-custom w-100">Create</button>
-                </div>
-            </form>
-        </div>
-    </div>
+<%- include('../partials/create-playlist-modal') %>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<%- include('../partials/layout-foot', { user, active: 'playlists' }) %>

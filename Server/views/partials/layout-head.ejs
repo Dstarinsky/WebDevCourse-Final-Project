@@ -1,0 +1,25 @@
+<%#
+    Opening half of the page shell. Every view includes this, so the font loading,
+    masthead, and skip link have exactly one owner.
+    Locals: title, user, active ('home'|'favorites'|'playlists'),
+            bodyClass (optional), bodyAttrs (optional raw attribute string)
+%>
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <title><%= title %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="<%= config.cdn.fontsCss %>" rel="stylesheet">
+    <link href="<%= config.cdn.bootstrapCss %>" rel="stylesheet"
+          integrity="<%= config.cdn.bootstrapCssIntegrity %>" crossorigin="anonymous">
+    <link href="<%= config.cdn.bootstrapIcons %>" rel="stylesheet"
+          integrity="<%= config.cdn.bootstrapIconsIntegrity %>" crossorigin="anonymous">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>"<%- typeof bodyAttrs !== 'undefined' ? ' ' + bodyAttrs : '' %>>
+    <a class="skip-link" href="#main-content">Skip to the music</a>
+    <%- include('masthead', { user, active }) %>

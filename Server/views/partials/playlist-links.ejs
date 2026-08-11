@@ -1,0 +1,36 @@
+<%#
+    The playlist rail list. Included twice by playlists/view.ejs — desktop rail and
+    mobile drawer — so this markup has one owner.
+    Locals: playlists, currentId, draggable (bool)
+%>
+<ul class="rail-list">
+    <% playlists.forEach((p, index) => { %>
+        <li class="rail-item <%= draggable ? 'playlist-item' : '' %>"
+            <%- draggable ? `draggable="true" data-id="${p.id}"` : '' %>>
+            <div class="d-flex align-items-center">
+                <a href="/playlists/<%= p.id %>" class="rail-link flex-grow-1"
+                   <%= p.id === currentId ? 'aria-current="page"' : '' %>>
+                    <span class="rail-link__index" aria-hidden="true"><%= String(index + 1).padStart(2, '0') %></span>
+                    <span class="rail-link__name"><%= p.name %></span>
+                </a>
+
+                <% if (draggable && playlists.length > 1) { %>
+                    <%# Drag is an enhancement; these buttons are the keyboard path and
+                        are labelled with the playlist they move. %>
+                    <span class="d-flex flex-shrink-0 pe-2">
+                        <button type="button" class="icon-button icon-button--bare js-move-up"
+                                aria-label="Move &ldquo;<%= p.name %>&rdquo; up"
+                                <%= index === 0 ? 'disabled' : '' %>>
+                            <i class="bi bi-chevron-up" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="icon-button icon-button--bare js-move-down"
+                                aria-label="Move &ldquo;<%= p.name %>&rdquo; down"
+                                <%= index === playlists.length - 1 ? 'disabled' : '' %>>
+                            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                        </button>
+                    </span>
+                <% } %>
+            </div>
+        </li>
+    <% }) %>
+</ul>

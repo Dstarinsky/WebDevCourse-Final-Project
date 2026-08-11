@@ -1,57 +1,60 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+// SQLite connection + startup sequencing.
+//
+// The old module built its schema inside the connection callback but exported the
+// handle immediately, so the first requests could race the CREATE TABLE statements.
+// `init()` now returns a promise the server awaits before it binds a port.
 const fs = require('fs');
+const path = require('path');
+const sqlite3 = require('sqlite3');
+const config = require('../config');
+const { createAdapter } = require('./sqlite');
+const { migrate } = require('./migrations');
 
-const uploadDir = path.join(__dirname, '../../client/uploads');
-if (!fs.existsSync(uploadDir)){ fs.mkdirSync(uploadDir, { recursive: true }); }
+fs.mkdirSync(path.dirname(config.database.path), { recursive: true });
 
-// DB_PATH lets tests point at a throwaway database instead of the dev one.
-const dbPath = process.env.DB_PATH
-    ? path.resolve(process.env.DB_PATH)
-    : path.resolve(__dirname, 'music_app.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) console.error(err.message);
-    else {
-        if (process.env.NODE_ENV !== 'test') console.log('Connected to SQLite database.');
+const db = new sqlite3.Database(config.database.path);
+const adapter = createAdapter(db);
 
-        // Enforce foreign keys so ON DELETE CASCADE removes a playlist's songs
-        db.run(`PRAGMA foreign_keys = ON`);
+let initPromise = null;
 
-        // Users Table
-        db.run(`CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE, firstName TEXT, lastName TEXT, passwordHash TEXT, createdAt TEXT
-        )`);
+/** Idempotent: concurrent callers share one initialisation. */
+function init() {
+    if (initPromise) return initPromise;
 
-        // Playlists Table
-        db.run(`CREATE TABLE IF NOT EXISTS playlists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, userId INTEGER, name TEXT, createdAt TEXT, position INTEGER DEFAULT 0, 
-            FOREIGN KEY(userId) REFERENCES users(id)
-        )`);
-        // Migration: Ensure 'position' exists for old databases
-        db.run(`ALTER TABLE playlists ADD COLUMN position INTEGER DEFAULT 0`, () => {});
+    initPromise = (async () => {
+        // No db.serialize() here: the adapter awaits each statement before issuing the
+        // next, which already guarantees ordering. Turning on node-sqlite3's serialized
+        // mode as well deadlocks exec() inside a transaction.
+        db.configure('busyTimeout', config.database.busyTimeoutMs);
 
-        // Songs Table
-        db.run(`CREATE TABLE IF NOT EXISTS playlist_songs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, playlistId INTEGER, videoId TEXT, title TEXT, thumbnailUrl TEXT, position INTEGER, source TEXT DEFAULT 'youtube', rating INTEGER DEFAULT 0,
-            FOREIGN KEY(playlistId) REFERENCES playlists(id) ON DELETE CASCADE
-        )`);
+        // ON DELETE CASCADE is inert without this, and it is per-connection.
+        await adapter.run('PRAGMA foreign_keys = ON');
+        // WAL lets reads proceed during a write. Skipped under test: the suite uses
+        // short-lived throwaway databases and WAL leaves extra -wal/-shm files behind.
+        if (!config.isTest) {
+            await adapter.run('PRAGMA journal_mode = WAL');
+        }
 
-        // Favorites Table
-        db.run(`CREATE TABLE IF NOT EXISTS favorites (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            userId INTEGER, 
-            videoId TEXT, 
-            title TEXT, 
-            thumbnailUrl TEXT, 
-            createdAt TEXT,
-            FOREIGN KEY(userId) REFERENCES users(id)
-        )`);
+        await migrate(adapter, { log: !config.isTest });
 
-        // FORCE ADD 'createdAt' COLUMN IF MISSING 
-        db.run(`ALTER TABLE favorites ADD COLUMN createdAt TEXT`, (err) => {
-            // If the column already exists, this will throw an error which we safely ignore here
-        });
-    }
-});
-module.exports = db;
+        if (!config.isTest) {
+            console.log(`Connected to SQLite database at ${config.database.path}`);
+        }
+        return adapter;
+    })();
+
+    return initPromise;
+}
+
+/** Cheap liveness probe for /healthz — proves the datastore answers, not just the process. */
+async function ping() {
+    await adapter.get('SELECT 1 AS ok');
+    return true;
+}
+
+module.exports = {
+    ...adapter,
+    raw: db,
+    init,
+    ping
+};

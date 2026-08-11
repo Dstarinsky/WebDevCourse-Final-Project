@@ -1,0 +1,65 @@
+<%#
+    One queue row — THE single source of truth for this markup.
+
+    Rendered per song by playlists/view.ejs and once (blank) inside a <template>
+    that client/js/playlist.js clones when a track is added.
+
+    Anatomy: index → 44px artwork/source tile → title + source → x/10 rating → remove.
+    The ten tiny star forms are replaced by ONE score button that opens the rating
+    sheet; the 0-10 model and the POST contract are unchanged.
+
+    Locals: song, playlistId, maxRating, csrfToken, isCurrent
+%>
+<li class="queue-item <%= isCurrent ? 'playing' : '' %>"
+    draggable="true"
+    data-song-id="<%= song.id %>"
+    data-source="<%= song.source %>"
+    data-title="<%= song.title %>"
+    data-rating="<%= song.rating %>"
+    data-video-id="<%= song.source === 'local' ? '' : song.videoId %>"
+    data-media-url="<%= song.source === 'local' ? `/media/${song.id}` : '' %>"
+    <%= isCurrent ? 'aria-current="true"' : '' %>>
+
+    <span class="queue-index" aria-hidden="true"></span>
+
+    <button type="button" class="queue-item__art play-link" aria-label="Play <%= song.title %>">
+        <span class="local-thumb <%= song.source === 'local' ? '' : 'd-none' %>" aria-hidden="true">
+            <i class="bi bi-file-earmark-music"></i>
+        </span>
+        <img class="queue-thumb <%= song.source === 'local' ? 'd-none' : '' %>"
+             src="<%= song.thumbnailUrl || '' %>" alt="" loading="lazy">
+    </button>
+
+    <div class="queue-item__body">
+        <button type="button" class="song-title play-link"><%= song.title %></button>
+        <span class="queue-item__meta">
+            <span class="source-label <%= song.source === 'local' ? 'source-label--local' : 'source-label--youtube' %>">
+                <%= song.source === 'local' ? 'Local' : 'YT' %>
+            </span>
+            <%# Now playing is text + rule + label, never colour alone. %>
+            <span class="meta-label now-playing-flag now-playing-text <%= isCurrent ? '' : 'd-none' %>">Now playing</span>
+        </span>
+    </div>
+
+    <div class="queue-item__actions">
+        <%# One score button. Opens the rating sheet; keeps the row compact and the
+            keyboard path short. %>
+        <button type="button"
+                class="rating-trigger js-rate <%= song.rating > 0 ? 'is-rated' : '' %>"
+                data-song-id="<%= song.id %>"
+                data-rating="<%= song.rating %>"
+                data-title="<%= song.title %>"
+                aria-label="Rate <%= song.title %>: <%= song.rating %> out of <%= maxRating %>">
+            <span class="rating-value-text"><%= song.rating %>/<%= maxRating %></span>
+        </button>
+
+        <form action="/playlists/<%= playlistId %>/remove" method="POST" class="remove-form m-0">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="songId" value="<%= song.id %>">
+            <button class="icon-button icon-button--bare queue-remove-btn" type="submit"
+                    aria-label="Remove <%= song.title %> from this mix">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </form>
+    </div>
+</li>

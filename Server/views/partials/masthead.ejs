@@ -1,0 +1,60 @@
+<%#
+    Slim global masthead. 80/20 navigation: only Discover and Library are product
+    paths; the account trigger holds sign-out so it cannot compete with them.
+    Locals: user, active
+%>
+<header class="masthead">
+    <div class="page-frame masthead__inner">
+        <a class="wordmark" href="/" aria-label="Music Hub home">
+            <span class="wordmark__music">Music</span>
+            <span class="wordmark__hub">Hub</span>
+            <span class="wordmark__channel" aria-hidden="true">
+                <span>Broadcast</span>
+                <span>MH—01</span>
+            </span>
+        </a>
+
+        <% if (user) { %>
+            <nav class="primary-nav desktop-primary-nav" aria-label="Primary">
+                <a class="primary-nav__link" href="/favorites"
+                   <%= active === 'favorites' ? 'aria-current="page"' : '' %>>Discover</a>
+                <a class="primary-nav__link" href="/playlists"
+                   <%= active === 'playlists' ? 'aria-current="page"' : '' %>>Library</a>
+            </nav>
+
+            <div class="ms-auto ms-md-0 ps-md-3">
+                <button class="account-trigger" type="button" data-bs-toggle="offcanvas"
+                        data-bs-target="#accountSheet" aria-controls="accountSheet">
+                    <i class="bi bi-person" aria-hidden="true"></i>
+                    <span><%= user.firstName %></span>
+                    <i class="bi bi-chevron-down d-none d-md-inline" aria-hidden="true"></i>
+                </button>
+            </div>
+        <% } else { %>
+            <nav class="primary-nav" aria-label="Primary">
+                <a class="action-link" href="/login">Sign in</a>
+                <a class="action-primary" href="/register">Build my first mix</a>
+            </nav>
+        <% } %>
+    </div>
+</header>
+
+<% if (user) { %>
+    <%# Account and sign-out live in a sheet: two clicks, so sign-out is not
+        accidentally activated from the main navigation. %>
+    <div class="offcanvas offcanvas-bottom" tabindex="-1" id="accountSheet" aria-labelledby="accountSheetLabel">
+        <div class="offcanvas-header">
+            <h2 class="offcanvas-title" id="accountSheetLabel">Account</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <p class="body-copy mb-4">
+                Signed in as <strong><%= user.firstName %></strong> — <%= user.email %>
+            </p>
+            <form action="/logout" method="POST" class="m-0">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button type="submit" class="action-secondary action-danger w-100">Sign out</button>
+            </form>
+        </div>
+    </div>
+<% } %>

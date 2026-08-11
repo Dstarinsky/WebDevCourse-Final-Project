@@ -1,0 +1,35 @@
+<%#
+    Fixed bottom navigation below 768px. Product paths are never hidden behind a
+    hamburger. Each tab has an icon AND a visible text label.
+    Locals: active, queueAvailable (bool — Queue is contextual to a playlist)
+%>
+<nav class="mobile-bottom-nav" aria-label="Primary">
+    <a class="mobile-bottom-nav__link" href="/favorites"
+       <%= active === 'favorites' ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <span>Discover</span>
+    </a>
+
+    <a class="mobile-bottom-nav__link" href="/playlists"
+       <%= active === 'playlists' ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-collection" aria-hidden="true"></i>
+        <span>Library</span>
+    </a>
+
+    <% if (queueAvailable) { %>
+        <button class="mobile-bottom-nav__link" type="button" data-bs-toggle="offcanvas"
+                data-bs-target="#queueSheet" aria-controls="queueSheet">
+            <i class="bi bi-list-ol" aria-hidden="true"></i>
+            <span>Queue</span>
+        </button>
+    <% } else { %>
+        <%# Disabled with an explanation rather than hidden, so the tab bar does not
+            change shape between pages. %>
+        <button class="mobile-bottom-nav__link" type="button" disabled
+                aria-describedby="queueTabHelp">
+            <i class="bi bi-list-ol" aria-hidden="true"></i>
+            <span>Queue</span>
+        </button>
+        <span id="queueTabHelp" class="visually-hidden">Open a mix to see its queue.</span>
+    <% } %>
+</nav>

@@ -1,0 +1,28 @@
+<%#
+    Rendered by the central error handler for any non-JSON failure.
+    Locals: title, user, status, message
+%>
+<%- include('partials/layout-head', { title, user, active: 'home', bodyClass: 'app-shell' }) %>
+
+<main id="main-content" class="app-main page-frame">
+    <div class="empty-editorial">
+        <div class="empty-editorial__head">
+            <p class="folio-display mb-0" aria-hidden="true"><%= status %></p>
+            <div>
+                <h1 class="section-title"><%= message %></h1>
+            </div>
+        </div>
+
+        <div class="hero-actions">
+            <% if (user) { %>
+                <a class="action-primary" href="/playlists">Back to my mixes</a>
+                <a class="action-secondary" href="/favorites">Find a track</a>
+            <% } else { %>
+                <a class="action-primary" href="/">Back to the start</a>
+                <a class="action-secondary" href="/login">Open my library</a>
+            <% } %>
+        </div>
+    </div>
+</main>
+
+<%- include('partials/layout-foot', { user, active: 'home' }) %>

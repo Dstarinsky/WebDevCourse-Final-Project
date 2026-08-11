@@ -1,199 +1,257 @@
+const config = require('../config');
+const path = require('path');
 const PlaylistRepository = require('../repositories/PlaylistRepository');
 const YouTubeService = require('../services/YouTubeService');
-const { RATING_MIN, RATING_MAX } = require('../constants');
-require('dotenv').config({ quiet: true });
+const { YouTubeUnavailableError } = require('../services/YouTubeService');
+const UploadService = require('../services/UploadService');
+const PlaylistSong = require('../models/PlaylistSong');
+const validate = require('../validation');
+const { wantsJson } = require('../middleware/errorHandler');
+const { NotFoundError, ValidationError } = require('../errors');
 
 class PlaylistController {
-
-    // Returns the playlist only if it belongs to the given user, otherwise null.
-    async getOwnedPlaylist(playlistId, userId) {
-        const playlist = await PlaylistRepository.getPlaylistById(playlistId);
-        if (!playlist || String(playlist.userId) !== String(userId)) return null;
-        return playlist;
-    }
-
-    // GET /playlists
-    // Automatically redirects to the first playlist
+    /** GET /playlists — jump straight to the first playlist, or show the empty state. */
     async index(req, res) {
-        try {
-            const playlists = await PlaylistRepository.getUserPlaylists(req.session.userId);
-
-            if (playlists.length > 0) {
-                // Redirect to first playlist
-                return res.redirect(`/playlists/${playlists[0].id}`);
-            }
-
-            // Only render "index" if NO playlists exist
-            res.render('playlists/index', { user: req.session.user, playlists: [] });
-        } catch (err) {
-            console.error(err);
-            res.redirect('/');
-        }
+        const playlists = await PlaylistRepository.getUserPlaylists(req.session.userId);
+        if (playlists.length > 0) return res.redirect(`/playlists/${playlists[0].id}`);
+        res.render('playlists/index', {
+            title: `My Library — ${config.branding.appName}`,
+            user: req.session.user,
+            playlists: []
+        });
     }
 
-    // 2. GET /playlists/:id
+    /**
+     * GET /playlists/:id — `req.playlist` is already ownership-checked by middleware.
+     *
+     * Filtering and sorting are deliberately client-side only (the queue is driven by
+     * fetch and never reloads, so the old server-side copy almost never ran). Playback
+     * identity is the song row id, not the videoId: the same video can appear twice in
+     * a playlist and each row must be individually addressable.
+     */
     async show(req, res) {
-        try {
-            const userId = req.session.userId;
-            const playlistId = req.params.id;
+        const { playlist } = req;
+        const [songs, allPlaylists] = await Promise.all([
+            PlaylistRepository.getSongsByPlaylistId(playlist.id),
+            PlaylistRepository.getUserPlaylists(req.session.userId)
+        ]);
 
-            const playlist = await this.getOwnedPlaylist(playlistId, userId);
-            // If playlist doesn't exist or isn't ours, go back to index
-            if (!playlist) return res.redirect('/playlists');
-
-            let songs = await PlaylistRepository.getSongsByPlaylistId(playlistId);
-            const allPlaylists = await PlaylistRepository.getUserPlaylists(userId);
-
-            // Filter & Sort Logic
-            const filterQuery = req.query.filter || '';
-            if (filterQuery) songs = songs.filter(s => s.title.toLowerCase().includes(filterQuery.toLowerCase()));
-
-            const sortBy = req.query.sort || 'default';
-            if (sortBy === 'name_asc') songs.sort((a, b) => a.title.localeCompare(b.title));
-            else if (sortBy === 'rating_desc') songs.sort((a, b) => b.rating - a.rating);
-
-            // Search Logic
-            let searchResults = [];
-            if (req.query.search) {
-                searchResults = await YouTubeService.search(req.query.search, 5);
-            }
-
-            const activeVideoId = req.query.play || (songs.length > 0 ? songs[0].videoId : null);
-            const currentSong = songs.find(s => s.videoId === activeVideoId) || (songs.length > 0 ? songs[0] : null);
-
-            res.render('playlists/view', {
-                user: req.session.user, playlist, songs, playlists: allPlaylists,
-                searchResults, currentSong, activeVideoId: currentSong ? currentSong.videoId : null,
-                searchQuery: req.query.search || '', filterQuery: filterQuery, sortBy: sortBy,
-                maxRating: RATING_MAX
-            });
-        } catch (err) { console.error(err); res.redirect('/playlists'); }
-    }
-
-    //Move Playlist (Up/Down)
-    async reorder(req, res) {
-        try {
-            // req.body.order will be an array; reorder is scoped to this user in the repo.
-            await PlaylistRepository.reorderPlaylists(req.session.userId, req.body.order);
-            res.json({ success: true });
-        } catch (err) {
-            console.error(err);
-            res.status(500).json({ success: false });
+        const requestedId = req.query.song ? validate.positiveId(req.query.song, 'Song id') : null;
+        const requestedSong = requestedId ? songs.find((song) => song.id === requestedId) : null;
+        if (requestedId && !requestedSong) {
+            throw new NotFoundError('Song not found in this playlist');
         }
-    }
+        const currentSong = requestedSong || songs[0] || null;
 
+        const searchQuery = validate.searchQuery(req.query.search);
+        let searchResults = [];
+        let searchError = null;
+        if (searchQuery) {
+            try {
+                searchResults = await YouTubeService.search(searchQuery);
+            } catch (err) {
+                if (!(err instanceof YouTubeUnavailableError)) throw err;
+                searchError = err.message;
+            }
+        }
+
+        res.render('playlists/view', {
+            title: `${playlist.name} — ${config.branding.appName}`,
+            user: req.session.user,
+            playlist,
+            songs,
+            playlists: allPlaylists,
+            searchResults,
+            searchQuery,
+            searchError,
+            currentSong
+        });
+    }
 
     async create(req, res) {
-        try {
-            const name = (req.body.name || '').trim();
-            if (name) await PlaylistRepository.createPlaylist(req.session.userId, name);
-            res.redirect('/playlists');
-        } catch (e) { console.error(e); res.redirect('/playlists'); }
+        const name = validate.requiredString(
+            req.body.name,
+            'Playlist name',
+            config.playlists.maxNameLength
+        );
+        const id = await PlaylistRepository.createPlaylist(req.session.userId, name);
+        res.redirect(`/playlists/${id}`);
     }
+
     async rename(req, res) {
-        try {
-            const name = (req.body.name || '').trim();
-            const playlist = await this.getOwnedPlaylist(req.body.id, req.session.userId);
-            if (playlist && name) await PlaylistRepository.renamePlaylist(req.body.id, name);
-            res.redirect(`/playlists/${req.body.id}`);
-        } catch (e) { console.error(e); res.redirect('/playlists'); }
+        const name = validate.requiredString(
+            req.body.name,
+            'Playlist name',
+            config.playlists.maxNameLength
+        );
+        const renamed = await PlaylistRepository.renamePlaylist(
+            req.playlist.id,
+            req.session.userId,
+            name
+        );
+        if (!renamed) throw new NotFoundError('Playlist not found');
+        res.redirect(`/playlists/${req.playlist.id}`);
     }
+
+    /** Deletes the playlist's uploaded files alongside its rows. */
     async delete(req, res) {
-        try {
-            const playlist = await this.getOwnedPlaylist(req.body.id, req.session.userId);
-            if (playlist) await PlaylistRepository.deletePlaylist(req.body.id);
-            res.redirect('/playlists');
-        } catch (e) { console.error(e); res.redirect('/playlists'); }
+        const localSongs = await PlaylistRepository.getLocalSongsByPlaylistId(req.playlist.id);
+        const deleted = await PlaylistRepository.deletePlaylist(
+            req.playlist.id,
+            req.session.userId
+        );
+        if (!deleted) throw new NotFoundError('Playlist not found');
+        // Rows are gone (ON DELETE CASCADE); orphaned files would otherwise remain forever.
+        await UploadService.discardSongs(localSongs);
+        res.redirect('/playlists');
     }
-    // JSON search endpoint used by the in-page (AJAX) YouTube search.
-    async apiSearch(req, res) {
+
+    async reorder(req, res) {
+        const order = validate.idArray(req.body.order, 'Order');
         try {
-            const results = await YouTubeService.search(req.query.q || req.query.search || '', 6);
-            res.json({ results });
-        } catch (err) { console.error(err); res.status(500).json({ results: [] }); }
+            await PlaylistRepository.reorderPlaylists(req.session.userId, order);
+        } catch {
+            // The transaction rolled back; the order referenced playlists this user
+            // does not own, or one vanished mid-request.
+            throw new ValidationError('That ordering is no longer valid — please refresh');
+        }
+        res.json({ success: true });
+    }
+
+    /** GET /api/search — JSON for the in-page search box. */
+    async apiSearch(req, res) {
+        const query = validate.requiredSearchQuery(req.query.q ?? req.query.search);
+        const results = await YouTubeService.search(query);
+        res.json({ success: true, results });
     }
 
     async addSong(req, res) {
-        try {
-            const playlist = await this.getOwnedPlaylist(req.params.id, req.session.userId);
-            let newId = null;
-            if (playlist) {
-                newId = await PlaylistRepository.addSong(req.params.id, req.body.videoId, req.body.title, req.body.thumbnailUrl, 'youtube');
-            }
-            if (wantsJson(req)) {
-                if (!playlist) return res.status(403).json({ success: false });
-                return res.json({ success: true, song: {
-                    id: newId, videoId: req.body.videoId, title: req.body.title,
-                    thumbnailUrl: req.body.thumbnailUrl, source: 'youtube', rating: 0
-                }});
-            }
-            res.redirect(`/playlists/${req.params.id}`);
-        } catch (e) {
-            console.error(e);
-            if (wantsJson(req)) return res.status(500).json({ success: false });
-            res.redirect(`/playlists/${req.params.id}`);
-        }
+        const song = await PlaylistRepository.addSong(req.playlist.id, {
+            videoId: validate.youtubeVideoId(req.body.videoId),
+            title: validate.requiredString(req.body.title, 'Title', config.youtube.maxTitleLength),
+            thumbnailUrl: validate.thumbnailUrl(req.body.thumbnailUrl),
+            source: PlaylistSong.SOURCE_YOUTUBE
+        });
+        if (wantsJson(req)) return res.status(201).json({ success: true, song: song.toClient() });
+        res.redirect(`/playlists/${req.playlist.id}`);
     }
+
+    /** Add a track from the favorites page, into an existing or brand-new playlist. */
     async addFromSearch(req, res) {
         const userId = req.session.userId;
-        const { videoId, title, thumbnailUrl, existingPlaylistId, newPlaylistName, currentSearch } = req.body;
-        try {
-            let targetPlaylistId = null;
-            let targetPlaylistName = "";
-            if (newPlaylistName && newPlaylistName.trim() !== "") {
-                targetPlaylistId = await PlaylistRepository.createPlaylist(userId, newPlaylistName.trim());
-                targetPlaylistName = newPlaylistName.trim();
-            } else {
-                // Only allow adding to a playlist the user actually owns.
-                const p = await this.getOwnedPlaylist(existingPlaylistId, userId);
-                if (p) { targetPlaylistId = p.id; targetPlaylistName = p.name; }
-            }
-            if (targetPlaylistId) { await PlaylistRepository.addSong(targetPlaylistId, videoId, title, thumbnailUrl, 'youtube'); }
-            const redirectUrl = `/favorites?search=${encodeURIComponent(currentSearch || '')}&addedToPlaylistId=${targetPlaylistId || ''}&addedToPlaylistName=${encodeURIComponent(targetPlaylistName)}`;
-            res.redirect(redirectUrl);
-        } catch (err) { console.error(err); res.redirect('/favorites'); }
-    }
-    async uploadSong(req, res) {
-        if (!req.file) return res.redirect(`/playlists/${req.params.id}`);
-        try {
-            const playlist = await this.getOwnedPlaylist(req.params.id, req.session.userId);
-            if (playlist) {
-                const title = req.body.title || req.file.originalname;
-                await PlaylistRepository.addSong(req.params.id, req.file.filename, title, '/images/mp3-icon.png', 'local');
-            }
-            res.redirect(`/playlists/${req.params.id}`);
-        } catch (err) { console.error(err); res.redirect(`/playlists/${req.params.id}`); }
-    }
-    async removeSong(req, res) {
-        try {
-            const playlist = await this.getOwnedPlaylist(req.params.id, req.session.userId);
-            if (playlist) await PlaylistRepository.removeSong(req.body.songId, req.params.id);
-            if (wantsJson(req)) return res.json({ success: !!playlist });
-            res.redirect(`/playlists/${req.params.id}`);
-        } catch (e) {
-            console.error(e);
-            if (wantsJson(req)) return res.status(500).json({ success: false });
-            res.redirect(`/playlists/${req.params.id}`);
-        }
-    }
-    async rateSong(req, res) {
-        try {
-            const playlist = await this.getOwnedPlaylist(req.params.id, req.session.userId);
-            const rating = Math.max(RATING_MIN, Math.min(RATING_MAX, parseInt(req.body.rating, 10) || 0));
-            if (playlist) await PlaylistRepository.updateSongRating(req.body.songId, rating, req.params.id);
-            if (wantsJson(req)) return res.json({ success: !!playlist, rating });
-            res.redirect(`/playlists/${req.params.id}`);
-        } catch (e) {
-            console.error(e);
-            if (wantsJson(req)) return res.status(500).json({ success: false });
-            res.redirect(`/playlists/${req.params.id}`);
-        }
-    }
-}
+        const videoId = validate.youtubeVideoId(req.body.videoId);
+        const title = validate.requiredString(
+            req.body.title,
+            'Title',
+            config.youtube.maxTitleLength
+        );
+        const thumbnailUrl = validate.thumbnailUrl(req.body.thumbnailUrl);
+        const newName = validate.optionalString(
+            req.body.newPlaylistName,
+            'Playlist name',
+            config.playlists.maxNameLength
+        );
 
-// True when the request came from our fetch() calls and expects JSON back.
-function wantsJson(req) {
-    return req.get('X-Requested-With') === 'fetch';
+        let target;
+        if (newName) {
+            const id = await PlaylistRepository.createPlaylist(userId, newName);
+            target = { id, name: newName };
+        } else {
+            const playlistId = validate.positiveId(req.body.existingPlaylistId, 'Playlist');
+            const owned = await PlaylistRepository.findOwnedPlaylist(playlistId, userId);
+            if (!owned) throw new NotFoundError('Playlist not found');
+            target = { id: owned.id, name: owned.name };
+        }
+
+        await PlaylistRepository.addSong(target.id, {
+            videoId,
+            title,
+            thumbnailUrl,
+            source: PlaylistSong.SOURCE_YOUTUBE
+        });
+
+        const params = new URLSearchParams({
+            search: validate.searchQuery(req.body.currentSearch),
+            addedToPlaylistId: String(target.id),
+            addedToPlaylistName: target.name
+        });
+        if (req.get('X-Requested-With') === 'fetch') {
+            return res.json({
+                success: true,
+                addedToPlaylistId: target.id,
+                addedToPlaylistName: target.name
+            });
+        }
+        res.redirect(`/favorites?${params}`);
+    }
+
+    /**
+     * Ownership was confirmed before Multer wrote anything (see loadOwnedPlaylist),
+     * so reaching here means the playlist is the caller's. The file still has to
+     * prove it is really audio before it is promoted out of the temp directory.
+     */
+    async uploadSong(req, res) {
+        if (!req.file) throw new ValidationError('Please choose an audio file to upload');
+
+        const tempPath = req.file.path;
+        try {
+            await UploadService.assertWithinQuota(req.session.userId, req.file.size);
+            const claimedExtension = path.extname(req.file.originalname || '').toLowerCase();
+            const { mime, ext } = await UploadService.detectAudioType(tempPath, claimedExtension);
+            const filename = await UploadService.promote(tempPath, ext);
+
+            try {
+                await PlaylistRepository.addSong(req.playlist.id, {
+                    videoId: filename,
+                    title:
+                        validate.optionalString(
+                            req.body.title,
+                            'Title',
+                            config.uploads.maxTitleLength
+                        ) || req.file.originalname.slice(0, config.uploads.maxTitleLength),
+                    thumbnailUrl: null,
+                    source: PlaylistSong.SOURCE_LOCAL,
+                    mimeType: mime,
+                    sizeBytes: req.file.size
+                });
+            } catch (err) {
+                // The row failed after the file landed — do not leave it orphaned.
+                await UploadService.discardStored(filename);
+                throw err;
+            }
+        } catch (err) {
+            await UploadService.discardTemp(tempPath);
+            throw err;
+        }
+
+        res.redirect(`/playlists/${req.playlist.id}`);
+    }
+
+    async removeSong(req, res) {
+        const songId = validate.positiveId(req.body.songId, 'Song id');
+        // Read first so the file can be deleted after the row is gone.
+        const song = await PlaylistRepository.findSongForUser(songId, req.session.userId);
+        const removed =
+            song && song.playlistId === req.playlist.id
+                ? await PlaylistRepository.removeSong(songId, req.playlist.id)
+                : false;
+
+        if (!removed) throw new NotFoundError('Song not found in this playlist');
+        if (song.isLocal) await UploadService.discardStored(song.videoId);
+
+        if (wantsJson(req)) return res.json({ success: true });
+        res.redirect(`/playlists/${req.playlist.id}`);
+    }
+
+    async rateSong(req, res) {
+        const songId = validate.positiveId(req.body.songId, 'Song id');
+        const rating = validate.rating(req.body.rating);
+        const updated = await PlaylistRepository.updateSongRating(songId, req.playlist.id, rating);
+        if (!updated) throw new NotFoundError('Song not found in this playlist');
+
+        if (wantsJson(req)) return res.json({ success: true, rating });
+        res.redirect(`/playlists/${req.playlist.id}`);
+    }
 }
 
 module.exports = new PlaylistController();

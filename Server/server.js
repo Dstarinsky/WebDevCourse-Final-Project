@@ -1,155 +1,283 @@
+// dotenv is loaded exactly once, here at the executable entry point, and before
+// config.js reads process.env. The controllers used to re-load it redundantly.
 require('dotenv').config({ quiet: true });
-const express = require('express');
-const path = require('path');
-const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
-const multer = require('multer');
 
-// --- IMPORT CONTROLLERS ---
+const path = require('path');
+const express = require('express');
+const session = require('express-session');
+const helmet = require('helmet');
+const SQLiteStore = require('connect-sqlite3')(session);
+
+const config = require('./config');
+const db = require('./database/db');
+
 const AuthController = require('./controllers/AuthController');
 const FavoriteController = require('./controllers/FavoriteController');
 const PlaylistController = require('./controllers/PlaylistController');
+const MediaController = require('./controllers/MediaController');
 
-// Configure Upload Storage
-// SECURITY: never reuse the client-supplied originalname in the on-disk path
-// (path traversal -> arbitrary file write). The stored name is fully
-// server-generated; only a vetted extension from an allowlist is carried over.
-const crypto = require('crypto');
-const fs = require('fs');
-const ALLOWED_AUDIO_EXT = new Set(['.mp3', '.m4a', '.ogg', '.oga', '.wav', '.flac', '.aac']);
-const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB cap
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../client/uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOAD_DIR);
-    },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        const safeExt = ALLOWED_AUDIO_EXT.has(ext) ? ext : '.mp3';
-        cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`);
-    }
-});
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
-    fileFilter: (req, file, cb) => {
-        // Accept only audio uploads with an allowlisted extension. This blocks
-        // .html/.ejs/.js (stored XSS / template-overwrite RCE) regardless of the
-        // (spoofable) mimetype.
-        const ext = path.extname(file.originalname).toLowerCase();
-        cb(null, file.mimetype.startsWith('audio/') && ALLOWED_AUDIO_EXT.has(ext));
-    }
-});
+const { asyncHandler, errorHandler, notFound } = require('./middleware/errorHandler');
+const { requireAuth, exposeUser, loadOwnedPlaylist } = require('./middleware/auth');
+const { csrfProtection, exposeCsrfToken } = require('./middleware/csrf');
+const {
+    authLimiter,
+    searchLimiter,
+    searchPageLimiter,
+    uploadLimiter,
+    writeLimiter
+} = require('./middleware/rateLimit');
+const { uploadSingleAudio } = require('./middleware/upload');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const isProduction = process.env.NODE_ENV === 'production';
+
+// --- VIEW ENGINE ----------------------------------------------------------
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+// Safe, non-secret settings every template can read, so views stop hardcoding CDN
+// URLs, the brand name, and policy values like the password minimum.
+app.locals.config = config.publicView;
+
+// Trust the platform proxy (Render) so secure cookies and client IPs resolve
+// correctly behind TLS termination. Set before any IP-based rate limiting.
+if (config.isProduction) app.set('trust proxy', 1);
+
+// --- SECURITY HEADERS -----------------------------------------------------
+const { origins } = config.cdn;
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                // All page behaviour lives in /js/*.js files, so no 'unsafe-inline' is
+                // needed for scripts — that is the payoff for extracting them from EJS.
+                scriptSrc: ["'self'", ...origins.script],
+                // Bootstrap components still set element styles at runtime.
+                styleSrc: ["'self'", "'unsafe-inline'", ...origins.style],
+                fontSrc: ["'self'", 'data:', ...origins.font],
+                imgSrc: ["'self'", 'data:', ...origins.img],
+                mediaSrc: ["'self'"],
+                frameSrc: origins.frame,
+                connectSrc: ["'self'"],
+                objectSrc: ["'none'"],
+                baseUri: ["'self'"],
+                formAction: ["'self'"],
+                frameAncestors: ["'none'"],
+                ...(config.isProduction ? { upgradeInsecureRequests: [] } : {})
+            }
+        },
+        // YouTube's embedded player needs a non-isolating cross-origin policy.
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+        hsts: config.isProduction ? { maxAge: 31536000, includeSubDomains: true } : false
+    })
+);
+
+// --- STATIC + BODY PARSING ------------------------------------------------
+// `client/` holds only CSS and JS now. Uploads live outside the web root and are
+// streamed through GET /media/:songId after an ownership check.
+app.use(
+    express.static(path.join(__dirname, '../client'), {
+        maxAge: config.isProduction ? '1d' : 0
+    })
+);
+
+// Explicit body limits — the defaults are generous for a form-driven app.
+app.use(express.urlencoded({ extended: false, limit: '32kb' }));
+app.use(express.json({ limit: '32kb' }));
+
+// --- SESSIONS -------------------------------------------------------------
+app.use(
+    session({
+        name: config.session.cookieName,
+        store: new SQLiteStore({ db: config.session.db, dir: config.session.dir }),
+        secret: config.session.secret,
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            maxAge: config.session.maxAgeMs,
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: config.isProduction
+        }
+    })
+);
+
+app.use(exposeUser);
+app.use(exposeCsrfToken);
+
+// --- HEALTH ---------------------------------------------------------------
+// Proves the datastore answers, not merely that the process is listening.
+app.get(
+    '/healthz',
+    asyncHandler(async (req, res) => {
+        await db.ping();
+        res.json({ status: 'ok', uptime: Math.round(process.uptime()) });
+    })
+);
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// --- CONFIGURATION ---
+// --- ROUTES ---------------------------------------------------------------
+const route = (controller, method) =>
+    asyncHandler((req, res, next) => controller[method](req, res, next));
 
-// Set View Engine to EJS
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
+// Authentication
+app.get('/login', route(AuthController, 'showLogin'));
+app.post('/login', authLimiter, csrfProtection, route(AuthController, 'login'));
+app.get('/register', route(AuthController, 'showRegister'));
+app.post('/register', authLimiter, csrfProtection, route(AuthController, 'register'));
+// POST, not GET: a GET logout is triggerable by any third-party <img> tag.
+app.post('/logout', csrfProtection, route(AuthController, 'logout'));
 
-// Trust the platform proxy (Render/Heroku) so secure cookies work behind TLS
-if (isProduction) app.set('trust proxy', 1);
-
-// Serve Static Files
-app.use(express.static(path.join(__dirname, '../client')));
-
-// Parse Form Data (express built-ins replace the deprecated body-parser package)
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
-// --- MIDDLEWARE ---
-
-// Redirect legacy ".html" URLs to their extensionless route
-app.use((req, res, next) => {
-    if (req.path.endsWith('.html')) {
-        return res.redirect(301, req.path.slice(0, -5));
-    }
-    next();
-});
-
-// Session Configuration (Stored in SQLite database)
-app.use(session({
-    store: new SQLiteStore({
-        db: process.env.SESSION_DB || 'sessions.sqlite',
-        dir: process.env.SESSION_DIR || path.join(__dirname, 'database')
-    }),
-    secret: process.env.SESSION_SECRET || 'dev-only-insecure-secret-change-me',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        maxAge: 1000 * 60 * 60 * 24, // 24 Hours
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: isProduction
-    }
-}));
-
-// Auth Protection Middleware
-const requireAuth = (req, res, next) => {
-    if (!req.session.userId) {
-        return res.redirect('/login');
-    }
-    // Make user data available to all views automatically
-    res.locals.user = req.session.user;
-    next();
-};
-
-// --- ROUTES (MVC Architecture) ---
-
-// -- Authentication Routes --
-app.get('/login', (req, res) => AuthController.showLogin(req, res));
-app.post('/login', (req, res) => AuthController.login(req, res));
-
-app.get('/register', (req, res) => AuthController.showRegister(req, res));
-app.post('/register', (req, res) => AuthController.register(req, res));
-
-app.get('/logout', (req, res) => AuthController.logout(req, res));
-
-// -- Home / Dashboard --
+// Home
 app.get('/', (req, res) => {
-    res.render('index', { user: req.session.user || null });
+    res.render('index', {
+        title: `${config.branding.appName} — your personal music library`,
+        user: req.session.user || null
+    });
 });
 
-// -- YouTube Favorites Routes --
-app.get('/favorites', requireAuth, (req, res) => FavoriteController.index(req, res));
-app.post('/favorites/add', requireAuth, (req, res) => FavoriteController.add(req, res));
-app.post('/favorites/remove', requireAuth, (req, res) => FavoriteController.remove(req, res));
+// Favorites
+app.get('/favorites', requireAuth, searchPageLimiter, route(FavoriteController, 'index'));
+app.post(
+    '/favorites/add',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    route(FavoriteController, 'add')
+);
+app.post(
+    '/favorites/remove',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    route(FavoriteController, 'remove')
+);
 
-// -- JSON API (used by in-page AJAX so playback isn't interrupted) --
-app.get('/api/search', requireAuth, (req, res) => PlaylistController.apiSearch(req, res));
+// JSON API
+app.get('/api/search', requireAuth, searchLimiter, route(PlaylistController, 'apiSearch'));
 
-// -- Playlist Management Routes --
-app.get('/playlists', requireAuth, (req, res) => PlaylistController.index(req, res));           // List all playlists
-app.post('/playlists/create', requireAuth, (req, res) => PlaylistController.create(req, res));   // Create new
-app.post('/playlists/delete', requireAuth, (req, res) => PlaylistController.delete(req, res));   // Delete playlist
-app.post('/playlists/reorder', requireAuth, (req, res) => PlaylistController.reorder(req, res));
-app.post('/playlists/rename', requireAuth, (req, res) => PlaylistController.rename(req, res));
-app.post('/playlists/add-from-search', requireAuth, (req, res) => PlaylistController.addFromSearch(req, res));
+// Private media
+app.get('/media/:songId', requireAuth, route(MediaController, 'stream'));
 
-app.get('/playlists/:id', requireAuth, (req, res) => PlaylistController.show(req, res));         // View Playlist + Player
-app.post('/playlists/:id/add', requireAuth, (req, res) => PlaylistController.addSong(req, res)); // Add song to playlist
-app.post('/playlists/:id/remove', requireAuth, (req, res) => PlaylistController.removeSong(req, res)); // Remove song
-app.post('/playlists/:id/upload', requireAuth, upload.single('mp3file'), (req, res) => PlaylistController.uploadSong(req, res));
-app.post('/playlists/:id/rate', requireAuth, (req, res) => PlaylistController.rateSong(req, res));
+// Playlists — collection routes
+app.get('/playlists', requireAuth, route(PlaylistController, 'index'));
+app.post(
+    '/playlists/create',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    route(PlaylistController, 'create')
+);
+app.post(
+    '/playlists/reorder',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    route(PlaylistController, 'reorder')
+);
+app.post(
+    '/playlists/add-from-search',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    route(PlaylistController, 'addFromSearch')
+);
+// `id` arrives in the body for these two, which loadOwnedPlaylist also accepts.
+app.post(
+    '/playlists/delete',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    loadOwnedPlaylist,
+    route(PlaylistController, 'delete')
+);
+app.post(
+    '/playlists/rename',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    loadOwnedPlaylist,
+    route(PlaylistController, 'rename')
+);
 
-// --- 404 Fallback ---
-app.use((req, res) => {
-    res.redirect(req.session && req.session.userId ? '/playlists' : '/');
-});
+// Playlists — member routes. loadOwnedPlaylist resolves and authorises `:id` once.
+app.get(
+    '/playlists/:id',
+    requireAuth,
+    searchPageLimiter,
+    loadOwnedPlaylist,
+    route(PlaylistController, 'show')
+);
+app.post(
+    '/playlists/:id/add',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    loadOwnedPlaylist,
+    route(PlaylistController, 'addSong')
+);
+app.post(
+    '/playlists/:id/remove',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    loadOwnedPlaylist,
+    route(PlaylistController, 'removeSong')
+);
+app.post(
+    '/playlists/:id/rate',
+    requireAuth,
+    writeLimiter,
+    csrfProtection,
+    loadOwnedPlaylist,
+    route(PlaylistController, 'rateSong')
+);
+// Ordering here is deliberate:
+//   1. requireAuth + uploadLimiter  — reject anonymous and abusive callers immediately.
+//   2. loadOwnedPlaylist            — authorise BEFORE multer accepts or writes bytes,
+//                                     so an upload aimed at someone else's playlist
+//                                     never touches the disk.
+//   3. uploadSingleAudio            — parse the multipart body.
+//   4. csrfProtection               — the token travels *inside* that body, so it can
+//                                     only be verified once multer has parsed it. A
+//                                     rejection here leaves a temp file, which the
+//                                     error handler unlinks.
+app.post(
+    '/playlists/:id/upload',
+    requireAuth,
+    uploadLimiter,
+    loadOwnedPlaylist,
+    uploadSingleAudio,
+    csrfProtection,
+    route(PlaylistController, 'uploadSong')
+);
 
-// --- START SERVER ---
-// Only listen when run directly; tests import `app` without binding a port.
+// --- 404 + ERRORS ---------------------------------------------------------
+// A real 404 (page or JSON), not the old blanket redirect that hid every typo.
+app.use(notFound);
+app.use(errorHandler);
+
+// --- STARTUP --------------------------------------------------------------
+async function start() {
+    // Schema and migrations complete before the first request can arrive.
+    await db.init();
+    return new Promise((resolve) => {
+        const server = app.listen(config.port, () => {
+            console.log(`${config.branding.appName} running at http://localhost:${config.port}`);
+            resolve(server);
+        });
+    });
+}
+
 if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`Server running at http://localhost:${PORT}`);
+    start().catch((err) => {
+        console.error('Failed to start:', err.message);
+        process.exit(1);
     });
 }
 
 module.exports = app;
+module.exports.start = start;
+module.exports.ready = () => db.init();

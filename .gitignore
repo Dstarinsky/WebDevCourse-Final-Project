@@ -1,6 +1,5 @@
 # ============================================================
 #  Music Hub - .gitignore
-#  Keeps the repo to project source code + README only.
 # ============================================================
 
 # --- Dependencies ---
@@ -10,22 +9,22 @@ node_modules/
 .env
 .env.*
 *.env
+# ...but the sanitized template MUST be committed: the README tells users to copy it.
+!.env.example
+!**/.env.example
 
 # --- Databases (runtime data) ---
 *.sqlite
 *.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 *.db
 
-# --- User uploads (MP3s) ---
-client/uploads/*
-!client/uploads/.gitkeep
-
-# --- Documentation & diagrams (keep only README.md) ---
-*.md
-!README.md
-docs/
-*.drawio
-*.model.xml
+# --- User uploads (stored outside the web root, served via /media/:songId) ---
+Server/storage/uploads/*
+!Server/storage/uploads/.gitkeep
+Server/backups/
 
 # --- Large media / recordings ---
 *.zip
@@ -38,11 +37,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# --- Editor / tooling ---
-.claude/
+# --- Editor / tooling / cache ---
+.developer/
 .vscode/
 .idea/
 *.swp
+.eslintcache
+
+# --- Testing / Coverage ---
+test-results/
+playwright-report/
+blob-report/
+coverage/
+.nyc_output/
 
 # --- OS files ---
 .DS_Store
@@ -53,3 +60,8 @@ yarn-error.log*
 ehthumbs.db
 Thumbs.db
 
+# Project documentation (README, DEVELOPER.md, WRITEUP.md, docs/ diagrams) is
+# deliberately tracked. The previous "*.md except README" rule silently hid every
+# design and review document from git status.
+!docs/
+!DEVELOPER.md

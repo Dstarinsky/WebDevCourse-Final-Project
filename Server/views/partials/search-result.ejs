@@ -1,0 +1,31 @@
+<%#
+    One YouTube search result inside the playlist workspace. Rendered per result and
+    once blank inside a <template> for client/js/playlist.js.
+    Locals: result, playlistId, csrfToken
+%>
+<article class="track-row search-result"
+         data-video-id="<%= result.videoId %>"
+         data-title="<%= result.title %>"
+         data-thumb="<%= result.thumbnail || '' %>">
+
+    <span class="track-row__media" aria-hidden="true">
+        <img src="<%= result.thumbnail || '' %>" alt="" class="result-thumb" loading="lazy">
+    </span>
+
+    <div class="track-row__body">
+        <div class="track-row__meta">
+            <span class="source-label source-label--youtube">YT</span>
+        </div>
+        <h3 class="track-row__title result-title"><%= result.title %></h3>
+    </div>
+
+    <div class="track-row__actions">
+        <form action="/playlists/<%= playlistId %>/add" method="POST" class="yt-add-form m-0">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="videoId" value="<%= result.videoId %>">
+            <input type="hidden" name="title" value="<%= result.title %>">
+            <input type="hidden" name="thumbnailUrl" value="<%= result.thumbnail || '' %>">
+            <button class="action-secondary add-result-btn" type="submit">Add to this mix</button>
+        </form>
+    </div>
+</article>
